@@ -8,7 +8,7 @@ function answersFromTarget(target: { public: 1 | 2 | 3; exposure: 1 | 2 | 3; bou
 }
 
 describe('computeResult', () => {
-  it('maps axis targets to the expected public type', () => {
+  it('keeps a candidate pool and still picks the expected cover type for a clean target', () => {
     const steady = publicTypeProfiles.find((profile) => profile.code === 'STEADY')
 
     expect(steady).toBeDefined()
@@ -16,10 +16,13 @@ describe('computeResult', () => {
     const snapshot = computeResult(answersFromTarget(steady!.target))
 
     expect(snapshot.publicType.code).toBe('STEADY')
+    expect(snapshot.candidatePool.length).toBe(3)
+    expect(snapshot.candidatePool[0]?.code).toBe('STEADY')
+    expect(snapshot.coverWords.length).toBeGreaterThanOrEqual(3)
     expect(snapshot.defaultExportMode).toBe('cover')
   })
 
-  it('builds draft fragments and trace notes from mirror bias plus exposure avoidance', () => {
+  it('surfaces conflicts, cut words, and residue from mirror plus exposure answers', () => {
     const answers = answersFromTarget({
       public: 2,
       exposure: 3,
@@ -38,10 +41,11 @@ describe('computeResult', () => {
 
     const snapshot = computeResult(answers)
 
-    expect(snapshot.draftResidue.lines.length).toBeGreaterThanOrEqual(2)
-    expect(snapshot.draftResidue.lines.length).toBeLessThanOrEqual(4)
-    expect(snapshot.draftResidue.lines.some((line) => line.includes('更容易公开认领'))).toBe(true)
-    expect(snapshot.draftResidue.lines.some((line) => line.includes('需要回应'))).toBe(true)
-    expect(snapshot.traceNotes.some((note) => note.text.includes('顺口'))).toBe(true)
+    expect(snapshot.conflictEvidence.length).toBeGreaterThan(0)
+    expect(snapshot.conflictEvidence.some((entry) => entry.before.includes('留白'))).toBe(true)
+    expect(snapshot.cutWords.some((word) => word.includes('需要被确认') || word.includes('想确认关系'))).toBe(true)
+    expect(snapshot.draftResidue.marks.length).toBeGreaterThanOrEqual(4)
+    expect(snapshot.draftResidue.marks.some((mark) => mark.tone === 'cut' && mark.strike)).toBe(true)
+    expect(snapshot.traceNotes.some((note) => note.text.includes('->'))).toBe(true)
   })
 })

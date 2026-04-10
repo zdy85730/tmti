@@ -1,16 +1,26 @@
 import { publicTypeProfiles } from '../data/publicTypes'
+import { questionOutcomeMap } from '../data/questionOutcomes'
 import { questions } from '../data/questions'
 import { DEFAULT_EXPORT_MODE } from './reveal'
 import type {
   AxisId,
+  ConflictEvidence,
   DraftResidue,
   PublicTypeProfile,
   QuizQuestion,
+  QuizValue,
+  ResultCandidate,
   ResultSnapshot,
   TraceNote,
 } from '../types'
 
-function scoreToLevel(score: number): 1 | 2 | 3 {
+type TokenWeights = Record<string, number>
+
+interface RankedCandidate extends ResultCandidate {
+  profile: PublicTypeProfile
+}
+
+function scoreToLevel(score: number): QuizValue {
   if (score <= 9) {
     return 1
   }
@@ -20,23 +30,6 @@ function scoreToLevel(score: number): 1 | 2 | 3 {
   }
 
   return 3
-}
-
-function collectMirrorBias(answers: Record<string, number>) {
-  return questions.reduce((total, question) => {
-    if (!question.mirrorOf) {
-      return total
-    }
-
-    const original = answers[question.mirrorOf]
-    const mirrored = answers[question.id]
-
-    if (original === undefined || mirrored === undefined) {
-      return total
-    }
-
-    return total + Math.max(0, mirrored - original)
-  }, 0)
 }
 
 function buildAxisScores(answers: Record<string, number>) {
@@ -55,121 +48,245 @@ function buildAxisScores(answers: Record<string, number>) {
 }
 
 function buildAxisLevels(axisScores: Record<AxisId, number>) {
-  return Object.entries(axisScores).reduce<Record<AxisId, 1 | 2 | 3>>((levels, [axis, score]) => {
+  return Object.entries(axisScores).reduce<Record<AxisId, QuizValue>>((levels, [axis, score]) => {
     levels[axis as AxisId] = scoreToLevel(score)
     return levels
-  }, {} as Record<AxisId, 1 | 2 | 3>)
+  }, {} as Record<AxisId, QuizValue>)
 }
 
-function rankPublicTypes(levels: Record<AxisId, 1 | 2 | 3>) {
+function addTokens(bucket: TokenWeights, tokens: string[] | undefined, weight = 1) {
+  if (!tokens?.length) {
+    return
+  }
+
+  tokens.forEach((token) => {
+    bucket[token] = (bucket[token] ?? 0) + weight
+  })
+}
+
+function pickEvidenceWord(questionId: string, answer: QuizValue) {
+  const outcome = questionOutcomeMap[questionId]
+
+  if (!outcome) {
+    return null
+  }
+
+  return outcome.cutTokens?.[answer]?.[0] ?? outcome.coverTokens?.[answer]?.[0] ?? null
+}
+
+function collectOutcomeTokens(answers: Record<string, number>) {
+  const coverWeights: TokenWeights = {}
+  const cutWeights: TokenWeights = {}
+  let coverPriority = 0
+
+  questions.forEach((question) => {
+    const answer = answers[question.id] as QuizValue | undefined
+
+    if (!answer) {
+      return
+    }
+
+    const outcome = questionOutcomeMap[question.id]
+
+    if (!outcome) {
+      return
+    }
+
+    const priority = outcome.priorityWeights?.[answer] ?? 0
+    coverPriority += priority
+
+    addTokens(coverWeights, outcome.coverTokens?.[answer], Math.max(1, priority))
+    addTokens(cutWeights, outcome.cutTokens?.[answer], 1)
+  })
+
+  return {
+    coverWeights,
+    cutWeights,
+    coverPriority,
+  }
+}
+
+function buildConflictEvidence(answers: Record<string, number>): ConflictEvidence[] {
+  return questions
+    .filter((question) => question.mirrorOf)
+    .flatMap((question) => {
+      const original = answers[question.mirrorOf!] as QuizValue | undefined
+      const mirrored = answers[question.id] as QuizValue | undefined
+
+      if (!original || !mirrored || original === mirrored) {
+        return []
+      }
+
+      const before = pickEvidenceWord(question.mirrorOf!, original)
+      const after = pickEvidenceWord(question.id, mirrored)
+
+      if (!before || !after) {
+        return []
+      }
+
+      const severity: ConflictEvidence['severity'] = Math.abs(mirrored - original) >= 2 ? 'hard' : 'soft'
+
+      return [
+        {
+          cue: questionOutcomeMap[question.id]?.conflictCue ?? '答案改写',
+          before,
+          after,
+          severity,
+        },
+      ]
+    })
+    .slice(0, 4)
+}
+
+function buildCandidatePool(
+  levels: Record<AxisId, QuizValue>,
+  coverWeights: TokenWeights,
+  cutWeights: TokenWeights,
+  conflicts: ConflictEvidence[],
+  coverPriority: number,
+): RankedCandidate[] {
+  const hardConflictCount = conflicts.filter((conflict) => conflict.severity === 'hard').length
+
   return [...publicTypeProfiles]
-    .map((profile) => ({
-      profile,
-      distance:
+    .map((profile) => {
+      const distance =
         Math.abs(profile.target.public - levels.public) +
         Math.abs(profile.target.exposure - levels.exposure) +
         Math.abs(profile.target.boundary - levels.boundary) +
-        Math.abs(profile.target.stability - levels.stability),
+        Math.abs(profile.target.stability - levels.stability)
+
+      const coverFit = profile.acceptedDescriptors.reduce((total, word) => total + (coverWeights[word] ?? 0), 0)
+      const shadowFit = profile.withheldDescriptors.reduce((total, word) => total + (cutWeights[word] ?? 0), 0)
+
+      let tensionFit = 0
+
+      if (profile.code === 'MIRROR') {
+        tensionFit += conflicts.length * 8
+      }
+
+      if (profile.code === 'ECHO') {
+        tensionFit += hardConflictCount * 6
+      }
+
+      if (profile.code === 'FRAME') {
+        tensionFit += (coverWeights['顺手体面'] ?? 0) * 4
+      }
+
+      if (profile.code === 'STEADY') {
+        tensionFit += (coverWeights['边界清楚'] ?? 0) * 4
+      }
+
+      if (profile.code === 'CLEAR') {
+        tensionFit += (coverWeights['清楚'] ?? 0) * 4
+      }
+
+      if (profile.code === 'VEIL') {
+        tensionFit += (coverWeights['留白'] ?? 0) * 4
+      }
+
+      if (profile.code === 'BUFFER') {
+        tensionFit += (coverWeights['好接近'] ?? 0) * 4
+      }
+
+      if (profile.code === 'LATE') {
+        tensionFit += (coverWeights['会先观察'] ?? 0) * 4
+      }
+
+      const score = 96 - distance * 14 + coverFit * 6 + shadowFit * 3 + tensionFit + coverPriority
+      const reasonWords = Array.from(
+        new Set([
+          ...profile.acceptedDescriptors.filter((word) => (coverWeights[word] ?? 0) > 0),
+          ...profile.withheldDescriptors.filter((word) => (cutWeights[word] ?? 0) > 0),
+        ]),
+      )
+
+      return {
+        code: profile.code,
+        name: profile.name,
+        score,
+        reasonWords: reasonWords.length ? reasonWords.slice(0, 3) : profile.acceptedDescriptors.slice(0, 3),
+        profile,
+      }
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3)
+}
+
+function pickCoverWords(profile: PublicTypeProfile, coverWeights: TokenWeights) {
+  const weighted = profile.acceptedDescriptors
+    .map((word) => ({
+      word,
+      score: coverWeights[word] ?? 0,
     }))
-    .sort((left, right) => left.distance - right.distance)
+    .sort((left, right) => right.score - left.score)
+    .filter((entry) => entry.score > 0)
+    .map((entry) => entry.word)
+
+  const fallback = profile.acceptedDescriptors.filter((word) => !weighted.includes(word))
+
+  return [...weighted, ...fallback].slice(0, 3)
 }
 
-function buildAvoidedText(levels: Record<AxisId, 1 | 2 | 3>) {
-  if (levels.exposure === 3) {
-    return '需要回应、怕被误解、想确认关系'
-  }
+function pickCutWords(profile: PublicTypeProfile, cutWeights: TokenWeights) {
+  const weighted = Object.entries(cutWeights)
+    .sort((left, right) => right[1] - left[1])
+    .map(([word]) => word)
 
-  if (levels.exposure === 2) {
-    return '解释成本太高、情绪留在边缘、把在意再压一下'
-  }
+  const fallback = profile.withheldDescriptors.filter((word) => !weighted.includes(word))
 
-  return '过度克制、完全留白、把自己收得太紧'
-}
-
-function buildWithheldText(profile: PublicTypeProfile, levels: Record<AxisId, 1 | 2 | 3>) {
-  const dynamic: string[] = []
-
-  if (levels.boundary === 1) {
-    dynamic.push('会跟着气氛走')
-  }
-
-  if (levels.stability === 1) {
-    dynamic.push('情绪起伏会改写判断')
-  }
-
-  if (levels.public === 1) {
-    dynamic.push('不想被一句话概括')
-  }
-
-  const merged = [...profile.withheldDescriptors, ...dynamic]
-  return Array.from(new Set(merged)).slice(0, 3).join('、')
-}
-
-function buildOptionalResidue(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number) {
-  if (mirrorBias >= 2) {
-    return '会先选更容易公开认领的说法'
-  }
-
-  if (levels.stability === 1) {
-    return '不同场合会换一层语气，只留下最稳的一句'
-  }
-
-  return null
+  return [...weighted, ...fallback].slice(0, 3)
 }
 
 function buildDraftResidue(
-  profile: PublicTypeProfile,
-  levels: Record<AxisId, 1 | 2 | 3>,
-  mirrorBias: number,
+  cutWords: string[],
+  conflicts: ConflictEvidence[],
+  candidates: RankedCandidate[],
 ): DraftResidue {
-  const lines = [
-    profile.acceptedDescriptors.slice(0, 3).join('、'),
-    buildAvoidedText(levels),
-    buildWithheldText(profile, levels),
+  const marks = [
+    ...cutWords.slice(0, 3).map((word) => ({
+      text: word,
+      tone: 'cut' as const,
+      strike: true,
+    })),
+    ...conflicts.slice(0, 2).map((conflict) => ({
+      text: `${conflict.before} -> ${conflict.after}`,
+      tone: 'conflict' as const,
+    })),
+    ...candidates
+      .slice(1, 3)
+      .flatMap((candidate) => candidate.reasonWords.slice(0, 1))
+      .map((word) => ({
+        text: word,
+        tone: 'alternate' as const,
+      })),
   ]
 
-  const optional = buildOptionalResidue(levels, mirrorBias)
-
-  if (optional) {
-    lines.push(optional)
-  }
-
   return {
-    lines: lines.slice(0, 4),
-    marginNote: levels.exposure === 3 ? '未导出' : '保留',
+    marks: marks.slice(0, 6),
+    marginNote: cutWords.length ? '裁切' : '边角',
   }
 }
 
-function buildTraceNotes(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number): TraceNote[] {
-  const notes: TraceNote[] = []
+function buildTraceNotes(
+  conflicts: ConflictEvidence[],
+  cutWords: string[],
+  candidates: RankedCandidate[],
+): TraceNote[] {
+  const notes: string[] = []
 
-  if (mirrorBias >= 2) {
-    notes.push({ text: '你更快接受顺口说法' })
-  } else if (levels.public === 3) {
-    notes.push({ text: '顺手表达被更早选中' })
-  } else {
-    notes.push({ text: '留白感被保留下来' })
+  conflicts.slice(0, 2).forEach((conflict) => {
+    notes.push(`${conflict.before} -> ${conflict.after}`)
+  })
+
+  if (cutWords.length) {
+    notes.push(cutWords.slice(0, 2).join(' / '))
   }
 
-  if (levels.exposure === 3) {
-    notes.push({ text: '高暴露描述多次未入选' })
-  } else if (levels.exposure === 2) {
-    notes.push({ text: '高暴露表达被往后放' })
-  } else {
-    notes.push({ text: '直接表达保留得更多' })
+  if (notes.length < 3 && candidates[1]) {
+    notes.push(candidates[1].reasonWords.join(' / ') || candidates[1].name)
   }
 
-  if (levels.boundary === 3) {
-    notes.push({ text: '边界语气出现得更早' })
-  } else if (levels.boundary === 1) {
-    notes.push({ text: '回应需求没有消失' })
-  } else if (levels.stability === 1) {
-    notes.push({ text: '不确定感被压低了一点' })
-  } else {
-    notes.push({ text: '稳定叙述更容易留下' })
-  }
-
-  return notes
+  return notes.slice(0, 3).map((text) => ({ text }))
 }
 
 export function shuffleQuestions(questionList: QuizQuestion[]) {
@@ -190,16 +307,29 @@ export function buildQuestionDeck() {
 export function computeResult(answers: Record<string, number>): ResultSnapshot {
   const axisScores = buildAxisScores(answers)
   const axisLevels = buildAxisLevels(axisScores)
-  const mirrorBias = collectMirrorBias(answers)
-  const ranked = rankPublicTypes(axisLevels)
-  const publicType = ranked[0]?.profile ?? publicTypeProfiles[0]
+  const { coverWeights, cutWeights, coverPriority } = collectOutcomeTokens(answers)
+  const conflictEvidence = buildConflictEvidence(answers)
+  const candidatePool = buildCandidatePool(axisLevels, coverWeights, cutWeights, conflictEvidence, coverPriority)
+  const selectedCandidate = candidatePool[0]
+  const publicType = selectedCandidate?.profile ?? publicTypeProfiles[0]
+  const coverWords = pickCoverWords(publicType, coverWeights)
+  const cutWords = pickCutWords(publicType, cutWeights)
 
   return {
     axisScores,
     axisLevels,
     publicType,
-    draftResidue: buildDraftResidue(publicType, axisLevels, mirrorBias),
-    traceNotes: buildTraceNotes(axisLevels, mirrorBias),
+    candidatePool: candidatePool.map((candidate) => ({
+      code: candidate.code,
+      name: candidate.name,
+      score: candidate.score,
+      reasonWords: candidate.reasonWords,
+    })),
+    coverWords,
+    cutWords,
+    conflictEvidence,
+    draftResidue: buildDraftResidue(cutWords, conflictEvidence, candidatePool),
+    traceNotes: buildTraceNotes(conflictEvidence, cutWords, candidatePool),
     brandRevealState: 'tmti',
     defaultExportMode: DEFAULT_EXPORT_MODE,
   }

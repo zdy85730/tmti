@@ -6,11 +6,15 @@ export function transitionBrandRevealState(
   current: BrandRevealState,
   event: BrandRevealEvent,
 ): BrandRevealState {
-  if (event === 'select-trace-export') {
+  if (current === 'meta-visible') {
+    return current
+  }
+
+  if (event === 'select-trace-export' || event === 'attempt-share') {
     return 'meta-visible'
   }
 
-  if (event === 'peek-draft' && current === 'tmti') {
+  if ((event === 'peek-draft' || event === 'inspect-preview') && current === 'tmti') {
     return 'draft-peek'
   }
 

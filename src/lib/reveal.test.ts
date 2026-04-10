@@ -8,6 +8,8 @@ describe('reveal state', () => {
 
   it('reveals draft and meta only through events', () => {
     expect(transitionBrandRevealState('tmti', 'peek-draft')).toBe('draft-peek')
+    expect(transitionBrandRevealState('tmti', 'inspect-preview')).toBe('draft-peek')
+    expect(transitionBrandRevealState('draft-peek', 'attempt-share')).toBe('meta-visible')
     expect(transitionBrandRevealState('draft-peek', 'select-trace-export')).toBe('meta-visible')
     expect(transitionBrandRevealState('meta-visible', 'peek-draft')).toBe('meta-visible')
   })

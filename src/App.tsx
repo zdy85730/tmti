@@ -15,7 +15,7 @@ import {
   saveResultSession,
   updateStoredSnapshot,
 } from './lib/storage'
-import type { BrandRevealState, ExportMode, PendingResult, QuizQuestion, ResultSnapshot, Screen } from './types'
+import type { BrandRevealEvent, ExportMode, PendingResult, QuizQuestion, ResultSnapshot, Screen } from './types'
 
 function formatCountdown(timeLeftMs: number) {
   const totalSeconds = Math.max(0, Math.ceil(timeLeftMs / 1000))
@@ -52,9 +52,7 @@ function App() {
   const gateProgress = pendingResult
     ? Math.min(
         100,
-        ((appConfig.generationWaitSeconds * 1000 - timeLeftMs) /
-          (appConfig.generationWaitSeconds * 1000)) *
-          100,
+        ((appConfig.generationWaitSeconds * 1000 - timeLeftMs) / (appConfig.generationWaitSeconds * 1000)) * 100,
       )
     : 0
 
@@ -156,16 +154,16 @@ function App() {
     setScreen('gate')
     track('quiz_completed', {
       publicType: snapshot.publicType.code,
+      coverCandidate: snapshot.candidatePool[0]?.code,
     })
   }
 
-  function liftRevealState(target: BrandRevealState) {
+  function applyReveal(event: BrandRevealEvent) {
     setResultSnapshot((current) => {
       if (!current) {
         return current
       }
 
-      const event = target === 'meta-visible' ? 'select-trace-export' : 'peek-draft'
       const nextState = transitionBrandRevealState(current.brandRevealState, event)
 
       if (nextState === current.brandRevealState) {
@@ -187,11 +185,7 @@ function App() {
     }
 
     setExportMode(nextMode)
-
-    if (nextMode === 'cover-with-trace') {
-      liftRevealState('meta-visible')
-    }
-
+    applyReveal(nextMode === 'cover-with-trace' ? 'select-trace-export' : 'attempt-share')
     setDownloadBusy(true)
 
     try {
@@ -214,7 +208,11 @@ function App() {
   }
 
   function handleResultInteraction() {
-    liftRevealState('draft-peek')
+    applyReveal('peek-draft')
+  }
+
+  function handlePreviewInspect() {
+    applyReveal('inspect-preview')
   }
 
   if (!booted) {
@@ -327,24 +325,32 @@ function App() {
               <p className="gate-stage">{gateStage}</p>
             </div>
             <div className="gate-preview">
-              <ResultPoster profile={resultSnapshot.publicType} compact />
+              <ResultPoster profile={resultSnapshot.publicType} chips={resultSnapshot.coverWords} compact />
             </div>
           </article>
         </section>
       )}
 
       {screen === 'result' && resultSnapshot && (
-        <section className="screen result-screen" onWheel={handleResultInteraction} onTouchMove={handleResultInteraction}>
+        <section
+          className="screen result-screen"
+          onPointerEnter={handleResultInteraction}
+          onWheel={handleResultInteraction}
+          onTouchMove={handleResultInteraction}
+        >
           <div className={`result-stack ${revealDraftVisible ? 'reveal-draft' : ''} ${revealMetaVisible ? 'reveal-meta' : ''}`}>
             <article className="draft-card">
               <div className="draft-card-head">
                 <small>{revealMetaVisible ? 'META-TI' : resultSnapshot.draftResidue.marginNote ?? '...'}</small>
               </div>
-              <div className="draft-line-list">
-                {resultSnapshot.draftResidue.lines.map((line) => (
-                  <p key={line} className="draft-line">
-                    {line}
-                  </p>
+              <div className="draft-mark-cloud">
+                {resultSnapshot.draftResidue.marks.map((mark) => (
+                  <span
+                    key={`${mark.tone}-${mark.text}`}
+                    className={`draft-mark tone-${mark.tone} ${mark.strike ? 'strike' : ''}`}
+                  >
+                    {mark.text}
+                  </span>
                 ))}
               </div>
             </article>
@@ -364,16 +370,38 @@ function App() {
                   <h2>{resultSnapshot.publicType.name}</h2>
                   <p className="cover-definition">{resultSnapshot.publicType.shortDefinition}</p>
                   <p className="cover-subtitle">{resultSnapshot.publicType.subtitle}</p>
+
+                  <div className={`candidate-row ${revealDraftVisible ? 'active' : ''}`}>
+                    {resultSnapshot.candidatePool.map((candidate, index) => (
+                      <span key={candidate.code} className={`candidate-chip ${index === 0 ? 'selected' : 'ghost'}`}>
+                        {candidate.name}
+                      </span>
+                    ))}
+                  </div>
+
                   <div className="descriptor-row">
-                    {resultSnapshot.publicType.acceptedDescriptors.map((descriptor) => (
+                    {resultSnapshot.coverWords.map((descriptor) => (
                       <span key={descriptor} className="descriptor-chip">
                         {descriptor}
                       </span>
                     ))}
                   </div>
+
+                  <div className={`cover-glitch-row ${revealDraftVisible ? 'active' : ''}`}>
+                    {resultSnapshot.cutWords.slice(0, 2).map((word) => (
+                      <span key={word} className="glitch-chip cut">
+                        {word}
+                      </span>
+                    ))}
+                    {resultSnapshot.conflictEvidence.slice(0, 2).map((conflict) => (
+                      <span key={`${conflict.cue}-${conflict.before}-${conflict.after}`} className="glitch-chip conflict">
+                        {conflict.before} {'->'} {conflict.after}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
-                <ResultPoster profile={resultSnapshot.publicType} />
+                <ResultPoster profile={resultSnapshot.publicType} chips={resultSnapshot.coverWords} />
               </div>
             </article>
           </div>
@@ -386,22 +414,32 @@ function App() {
             ))}
           </div>
 
-          <article className="export-card">
+          <article className="export-card" onPointerEnter={handlePreviewInspect}>
             <div className="export-header">
               <p className="eyebrow">预览</p>
-              {exportPreviewShowsTrace && <small className="export-meta-tag">META-TI</small>}
+              {revealMetaVisible && <small className="export-meta-tag">META-TI</small>}
             </div>
 
-            <div className={`export-preview ${exportPreviewShowsTrace ? 'with-trace' : ''}`}>
+            <div className={`export-preview ${revealDraftVisible ? 'peeked' : ''} ${exportPreviewShowsTrace ? 'with-trace' : ''}`}>
               <div className="export-preview-draft">
-                <span>{resultSnapshot.draftResidue.marginNote ?? '...'}</span>
-                <p>{resultSnapshot.draftResidue.lines[0]}</p>
-                <p>{resultSnapshot.draftResidue.lines[1]}</p>
+                <span>{revealMetaVisible ? 'META-TI' : resultSnapshot.draftResidue.marginNote ?? '...'}</span>
+                <div className="export-preview-draft-marks">
+                  {resultSnapshot.draftResidue.marks.slice(0, 4).map((mark) => (
+                    <p key={`${mark.tone}-${mark.text}`} className={`${mark.strike ? 'strike' : ''} tone-${mark.tone}`}>
+                      {mark.text}
+                    </p>
+                  ))}
+                </div>
               </div>
               <div className="export-preview-cover">
                 <span>TMTI</span>
                 <strong>{resultSnapshot.publicType.name}</strong>
                 <p>{resultSnapshot.publicType.subtitle}</p>
+                <div className="export-preview-cover-chips">
+                  {resultSnapshot.coverWords.map((word) => (
+                    <i key={word}>{word}</i>
+                  ))}
+                </div>
               </div>
             </div>
 

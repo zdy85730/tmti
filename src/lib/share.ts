@@ -168,10 +168,22 @@ function drawDraftResidue(
   context.lineWidth = 2
   context.stroke()
 
-  context.fillStyle = '#6d6862'
   context.font = '500 17px "Noto Sans SC", sans-serif'
-  snapshot.draftResidue.lines.slice(0, 3).forEach((line, index) => {
-    context.fillText(line, x + 36, y + 96 + index * 48)
+  snapshot.draftResidue.marks.slice(0, 5).forEach((mark, index) => {
+    const lineY = y + 88 + index * 44
+
+    context.fillStyle = mark.tone === 'alternate' ? '#8a857f' : '#6d6862'
+    context.fillText(mark.text, x + 36, lineY)
+
+    if (mark.strike) {
+      const width = context.measureText(mark.text).width
+      context.strokeStyle = 'rgba(109, 104, 98, 0.56)'
+      context.lineWidth = 2
+      context.beginPath()
+      context.moveTo(x + 36, lineY - 6)
+      context.lineTo(x + 36 + width, lineY - 6)
+      context.stroke()
+    }
   })
 
   context.fillStyle = '#8a8682'
@@ -233,7 +245,7 @@ function drawCoverCard(
   wrapText(context, snapshot.publicType.subtitle, posterX + 30, posterY + 228, posterWidth - 60, 36)
 
   context.font = '600 19px "Noto Sans SC", sans-serif'
-  snapshot.publicType.acceptedDescriptors.forEach((descriptor, index) => {
+  snapshot.coverWords.forEach((descriptor, index) => {
     const chipX = posterX + 30 + index * 160
     const chipY = posterY + posterHeight - 76
     drawRoundedRect(context, chipX, chipY, 128, 38, 19)

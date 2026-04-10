@@ -1,6 +1,7 @@
 export type Screen = 'intro' | 'quiz' | 'gate' | 'result'
 
 export type AxisId = 'public' | 'exposure' | 'boundary' | 'stability'
+export type QuizValue = 1 | 2 | 3
 
 export type SignalTag = 'regular' | 'mirror' | 'preference' | 'exposure'
 
@@ -9,13 +10,13 @@ export type MotifId = 'frame' | 'orbit' | 'column' | 'ripple' | 'veil' | 'band' 
 export type ThemeToken = 'ember' | 'ink' | 'moss' | 'berry' | 'slate' | 'dusk' | 'linen' | 'glass'
 
 export type BrandRevealState = 'tmti' | 'draft-peek' | 'meta-visible'
-export type BrandRevealEvent = 'peek-draft' | 'select-trace-export'
+export type BrandRevealEvent = 'peek-draft' | 'inspect-preview' | 'attempt-share' | 'select-trace-export'
 
 export type ExportMode = 'cover' | 'cover-with-trace'
 
 export interface QuizOption {
   label: string
-  value: 1 | 2 | 3
+  value: QuizValue
 }
 
 export interface QuizQuestion {
@@ -39,8 +40,35 @@ export interface PublicTypeProfile {
   withheldDescriptors: string[]
 }
 
+export interface QuestionOutcomeConfig {
+  coverTokens?: Record<QuizValue, string[]>
+  cutTokens?: Record<QuizValue, string[]>
+  priorityWeights?: Record<QuizValue, number>
+  conflictCue?: string
+}
+
+export interface ResultCandidate {
+  code: string
+  name: string
+  score: number
+  reasonWords: string[]
+}
+
+export interface ConflictEvidence {
+  cue: string
+  before: string
+  after: string
+  severity: 'soft' | 'hard'
+}
+
+export interface ResidueMark {
+  text: string
+  tone: 'cut' | 'conflict' | 'alternate'
+  strike?: boolean
+}
+
 export interface DraftResidue {
-  lines: string[]
+  marks: ResidueMark[]
   marginNote?: string
 }
 
@@ -50,8 +78,12 @@ export interface TraceNote {
 
 export interface ResultSnapshot {
   axisScores: Record<AxisId, number>
-  axisLevels: Record<AxisId, 1 | 2 | 3>
+  axisLevels: Record<AxisId, QuizValue>
   publicType: PublicTypeProfile
+  candidatePool: ResultCandidate[]
+  coverWords: string[]
+  cutWords: string[]
+  conflictEvidence: ConflictEvidence[]
   draftResidue: DraftResidue
   traceNotes: TraceNote[]
   brandRevealState: BrandRevealState

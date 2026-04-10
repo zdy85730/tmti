@@ -5,10 +5,12 @@ import type { PublicTypeProfile } from '../types'
 interface ResultPosterProps {
   profile: PublicTypeProfile
   compact?: boolean
+  chips?: string[]
 }
 
-export function ResultPoster({ profile, compact = false }: ResultPosterProps) {
+export function ResultPoster({ profile, compact = false, chips }: ResultPosterProps) {
   const palette = themePalettes[profile.themeToken]
+  const activeChips = chips?.length ? chips : profile.acceptedDescriptors
 
   return (
     <div
@@ -40,7 +42,7 @@ export function ResultPoster({ profile, compact = false }: ResultPosterProps) {
           <p className="poster-subtitle">{profile.subtitle}</p>
         </div>
         <div className="poster-chip-row">
-          {profile.acceptedDescriptors.map((descriptor) => (
+          {activeChips.map((descriptor) => (
             <span key={descriptor} className="poster-chip">
               {descriptor}
             </span>
