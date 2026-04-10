@@ -1,0 +1,43 @@
+import type { VoicePack } from '../types'
+
+export const voicePacks: Record<VoicePack['id'], VoicePack> = {
+  groupchat: {
+    id: 'groupchat',
+    label: '群聊嘴碎',
+    previewEyebrow: '这套能直接丢群里',
+    previewSheetLabel: '先看三题',
+    copyAction: '复制这套',
+    shareAction: '发群里',
+    playAction: '我先做一遍',
+    copyFeedback: '链接复制好了，直接甩群里就行。',
+    nativeFeedback: '系统分享已经打开了。',
+    resultEyebrow: '群聊外号',
+    resultSourceLabel: '这套题是从 TMTI 那边长出来的',
+  },
+  shortvideo: {
+    id: 'shortvideo',
+    label: '短视频发病',
+    previewEyebrow: '这套发出去就有人对号入座',
+    previewSheetLabel: '先刷三题',
+    copyAction: '复制这套狠的',
+    shareAction: '转出去',
+    playAction: '我先试试',
+    copyFeedback: '链接已经备好，直接转出去。',
+    nativeFeedback: '系统分享开好了，爱发哪发哪。',
+    resultEyebrow: '发病外号',
+    resultSourceLabel: '这套题从 TMTI 那边拎出来的',
+  },
+  danmu: {
+    id: 'danmu',
+    label: '弹幕区阴阳',
+    previewEyebrow: '这套一发就像开弹幕',
+    previewSheetLabel: '先看这三句',
+    copyAction: '复制这套整活',
+    shareAction: '发给队友',
+    playAction: '我先开一把',
+    copyFeedback: '链接到手，直接扔给人做。',
+    nativeFeedback: '分享面板已经弹出来了。',
+    resultEyebrow: '圈内外号',
+    resultSourceLabel: '这套题是 TMTI 放出来的局',
+  },
+}

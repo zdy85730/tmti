@@ -5,6 +5,7 @@ import { outcomePacks } from '../data/outcomePacks'
 import { questionTemplates, themeSeeds } from '../data/questionTemplates'
 import { sourceTraces } from '../data/sourceTraces'
 import { themePackQuestions, themePacks } from '../data/themePacks'
+import { voicePacks } from '../data/voicePacks'
 import type {
   BuilderRhythm,
   BuilderScene,
@@ -93,7 +94,7 @@ function isThemeToken(value: string): value is ThemeToken {
 }
 
 function isScene(value: string): value is BuilderScene {
-  return ['relationship', 'friendship', 'work', 'mixed'].includes(value)
+  return ['work', 'game', 'mixed'].includes(value)
 }
 
 function isRhythm(value: string): value is BuilderRhythm {
@@ -127,13 +128,16 @@ function pickQuestions(pack: ThemePack, seed: number) {
 }
 
 function pickThemePack(profile: GeneratorProfile) {
-  const matchingFamily = themePacks.filter((pack) => pack.family === profile.selectedFamily)
-  const ranked = matchingFamily
+  const ranked = themePacks
     .map((pack) => {
       let score = 0
 
-      if (pack.scene === profile.selectedScene) {
+      if (pack.family === profile.selectedFamily) {
         score += 3
+      }
+
+      if (pack.scene === profile.selectedScene) {
+        score += 4
       } else if (profile.selectedScene === 'mixed' || pack.scene === 'mixed') {
         score += 1
       }
@@ -152,7 +156,7 @@ function pickThemePack(profile: GeneratorProfile) {
     })
     .sort((left, right) => right.score - left.score || left.pack.id.localeCompare(right.pack.id))
 
-  return ranked[Math.abs(profile.seed) % ranked.length]?.pack ?? matchingFamily[0]
+  return ranked[Math.abs(profile.seed) % ranked.length]?.pack ?? themePacks[0]
 }
 
 function buildQuizId(themePackId: string, seed: number) {
@@ -191,8 +195,8 @@ export function buildGeneratorProfile(answers: GeneratorAnswerMap): GeneratorPro
 export function buildGeneratedQuiz(profile: GeneratorProfile): GeneratedQuizDefinition {
   const pack = pickThemePack(profile)
   const tonePack = pack.tonePacks.includes(profile.selectedTone) ? profile.selectedTone : pack.tonePacks[0]
-  const title = pack.titleVariants[tonePack][profile.selectedTitleStyle]
-  const intro = pack.introVariants[tonePack]
+  const title = pack.headlineVariants[tonePack][profile.selectedTitleStyle]
+  const intro = pack.hookVariants[tonePack]
   const questions = pickQuestions(pack, profile.seed)
 
   return {
@@ -204,10 +208,14 @@ export function buildGeneratedQuiz(profile: GeneratorProfile): GeneratedQuizDefi
     themePackId: pack.id,
     tonePack,
     themeToken: profile.selectedThemeToken ?? pack.themeToken,
+    voicePackId: pack.voicePackId,
+    memeTags: pack.memeTags,
     seed: profile.seed,
     questionIds: questions.map((question) => question.id),
     questions,
     outcomePackId: pack.outcomePackId,
+    shareTitle: pack.shareTitle,
+    shareSubtitle: pack.shareSubtitle,
     metaTiLink: `${appConfig.siteUrl}?about=metati`,
   }
 }
@@ -325,10 +333,14 @@ export function decodeQuizToken(token: string): GeneratedQuizDefinition | null {
       themePackId: pack.id,
       tonePack: payload.tonePack,
       themeToken: payload.themeToken,
+      voicePackId: pack.voicePackId,
+      memeTags: pack.memeTags,
       seed: payload.seed ?? hashString(payload.quizId),
       questionIds: payload.questionIds,
       questions,
       outcomePackId: payload.outcomePackId,
+      shareTitle: pack.shareTitle,
+      shareSubtitle: pack.shareSubtitle,
       metaTiLink: `${appConfig.siteUrl}?about=metati`,
     }
   } catch {
@@ -339,10 +351,30 @@ export function decodeQuizToken(token: string): GeneratedQuizDefinition | null {
 export function validateThemePack(pack: ThemePack) {
   const errors: string[] = []
   const questions = resolveQuestions(pack.questionIds)
+  const bannedTitleBits = ['问卷', '量表', '观察', '类型', '风格', '稳定度']
 
   if (questions.length !== 12) {
     errors.push(`${pack.id}: expected 12 questions`)
   }
+
+  if (!voicePacks[pack.voicePackId]) {
+    errors.push(`${pack.id}: unknown voice pack`)
+  }
+
+  if (!pack.shareTitle || !pack.shareSubtitle) {
+    errors.push(`${pack.id}: missing share copy`)
+  }
+
+  Object.values(pack.headlineVariants)
+    .flatMap((variants) => Object.values(variants))
+    .forEach((headline) => {
+      if (bannedTitleBits.some((bit) => headline.includes(bit))) {
+        errors.push(`${pack.id}: headline contains banned word "${headline}"`)
+      }
+      if (headline.includes('测试')) {
+        errors.push(`${pack.id}: headline should not include 测试`)
+      }
+    })
 
   const duplicatePrompts = new Set<string>()
   questions.forEach((question) => {
@@ -358,10 +390,21 @@ export function validateThemePack(pack: ThemePack) {
       errors.push(`${pack.id}: duplicate prompt "${question.prompt}"`)
     }
     duplicatePrompts.add(question.prompt)
+
+    if (!question.sceneTag) {
+      errors.push(`${question.id}: missing scene tag`)
+    }
   })
 
-  if (!getOutcomePack(pack.outcomePackId)) {
+  const outcomePack = getOutcomePack(pack.outcomePackId)
+  if (!outcomePack) {
     errors.push(`${pack.id}: unknown outcome pack`)
+  } else {
+    outcomePack.outcomes.forEach((outcome) => {
+      if (['型', '人格', '玩家类型'].some((bit) => outcome.nickname.includes(bit))) {
+        errors.push(`${outcome.id}: nickname contains banned word`)
+      }
+    })
   }
 
   return errors

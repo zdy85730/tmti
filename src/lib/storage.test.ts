@@ -26,7 +26,7 @@ describe('generated quiz session storage', () => {
   it('round-trips the last generated quiz and builder answers', () => {
     const answers = {
       family: 'boundary',
-      scene: 'relationship',
+      scene: 'work',
       tone: 'soft',
       titleStyle: 'essay',
       rhythm: 'scene',
@@ -61,4 +61,3 @@ describe('generated quiz session storage', () => {
     expect(loadGeneratedQuizSession()).toBeNull()
   })
 })
-

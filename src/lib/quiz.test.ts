@@ -3,7 +3,7 @@ import { buildGeneratedQuiz, buildGeneratorProfile, computeGeneratedQuizResult, 
 
 const builderAnswers = {
   family: 'response',
-  scene: 'relationship',
+  scene: 'game',
   tone: 'clean',
   titleStyle: 'plain',
   rhythm: 'scene',
@@ -38,7 +38,7 @@ describe('TMTI quiz generation', () => {
     const answers = Object.fromEntries(quiz.questions.map((question) => [question.id, question.options[0]?.id ?? 'a']))
     const result = computeGeneratedQuizResult(answers, quiz)
 
-    expect(result.outcome.title.length).toBeGreaterThan(0)
+    expect(result.outcome.nickname.length).toBeGreaterThan(0)
     expect(Object.keys(result.axisScores)).toHaveLength(2)
     expect(Object.values(result.axisPercentages).every((score) => score >= 0 && score <= 100)).toBe(true)
   })

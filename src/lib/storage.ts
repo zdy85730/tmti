@@ -44,6 +44,10 @@ export function loadGeneratedQuizSession(): StoredQuizSession | null {
     typeof definition.intro !== 'string' ||
     typeof definition.themePackId !== 'string' ||
     typeof definition.outcomePackId !== 'string' ||
+    typeof definition.voicePackId !== 'string' ||
+    typeof definition.shareTitle !== 'string' ||
+    typeof definition.shareSubtitle !== 'string' ||
+    !Array.isArray(definition.memeTags) ||
     !Array.isArray(definition.questionIds) ||
     !Array.isArray(definition.questions)
   ) {

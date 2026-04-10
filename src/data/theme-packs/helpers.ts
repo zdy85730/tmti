@@ -3,6 +3,7 @@ import type {
   GeneratedQuizOption,
   ThemePack,
   ThemePackQuestion,
+  SlangLevel,
   TonePack,
 } from '../../types'
 
@@ -47,3 +48,20 @@ export function toneTitles(
   return { soft, clean, sharp, observant }
 }
 
+export function sameToneTitles(variants: Record<BuilderTitleStyle, string>): TitleVariants {
+  return toneTitles(variants, variants, variants, variants)
+}
+
+export type DraftQuestion = Omit<ThemePackQuestion, 'slangLevel' | 'sceneTag'>
+
+export function withQuestionMeta(
+  questions: DraftQuestion[],
+  sceneTag: string,
+  slangLevel: SlangLevel,
+): ThemePackQuestion[] {
+  return questions.map((question) => ({
+    ...question,
+    sceneTag,
+    slangLevel,
+  }))
+}

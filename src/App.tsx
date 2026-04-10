@@ -5,6 +5,7 @@ import { appConfig } from './config'
 import { generatorQuestions } from './data/generatorQuestions'
 import { manifest } from './data/manifest'
 import { themePalettes } from './data/themeTokens'
+import { voicePacks } from './data/voicePacks'
 import { track } from './lib/analytics'
 import {
   buildGeneratedQuiz,
@@ -112,6 +113,7 @@ function App() {
   const quizProgress = generatedQuiz ? getQuizProgress(generatedQuiz.questions, playAnswers) : null
   const activePalette = themePalettes[generatedQuiz?.themeToken ?? 'linen']
   const activeOutcomePack = generatedQuiz ? getOutcomePackById(generatedQuiz.outcomePackId) : null
+  const activeVoicePack = voicePacks[generatedQuiz?.voicePackId ?? 'groupchat']
 
   function setBuilderAnswer(questionId: string, value: string) {
     setBuilderAnswers((current) => ({
@@ -204,7 +206,7 @@ function App() {
     setShareBusy(true)
     try {
       await copyQuizLink(generatedQuiz)
-      setFeedback('问卷链接已复制。')
+      setFeedback(voicePacks[generatedQuiz.voicePackId].copyFeedback)
     } finally {
       setShareBusy(false)
       window.setTimeout(() => setFeedback(''), 1800)
@@ -219,7 +221,7 @@ function App() {
     setShareBusy(true)
     try {
       await shareQuizLink(generatedQuiz)
-      setFeedback('已打开系统分享。')
+      setFeedback(voicePacks[generatedQuiz.voicePackId].nativeFeedback)
     } finally {
       setShareBusy(false)
       window.setTimeout(() => setFeedback(''), 1800)
@@ -263,11 +265,11 @@ function App() {
               <p className="hero-brand">{appConfig.brandName}</p>
               <h1>{appConfig.brandTagline}</h1>
               <p className="hero-lede">
-                先回答几道生成器问题，系统会产出一份完整可分享的中文问卷。别人打开链接后，可以像普通测试一样一路做完并拿到结果。
+                先挑几下口味，系统会长出一套能直接丢群里的测试。别人点开链接之后，可以像平时做梗测试一样一路做完，再拿到自己的圈内外号。
               </p>
               <div className="button-row">
                 <button className="button button-primary" onClick={startBuilder}>
-                  开始生成
+                  开始捏题
                 </button>
                 <button className="button button-secondary" onClick={openAbout}>
                   了解 META-TI
@@ -278,13 +280,13 @@ function App() {
             <div className="hero-side">
               <div className="hero-sheet hero-sheet-back">
                 <span>TMTI</span>
-                <strong>{manifest.themePackCount} 份题材包</strong>
-                <p>完整问卷链接</p>
+                <strong>{manifest.themePackCount} 个具体局</strong>
+                <p>能直接发群</p>
               </div>
               <div className="hero-sheet hero-sheet-front">
-                <span>生成物</span>
-                <strong>不是标签</strong>
-                <p>而是一份可以继续被别人完成的问卷。</p>
+                <span>第一波</span>
+                <strong>游戏 + 职场</strong>
+                <p>先从最容易互相对号入座的几种局开做。</p>
               </div>
             </div>
           </article>
@@ -298,7 +300,7 @@ function App() {
               </div>
               <div className="button-row compact-row">
                 <button className="button button-secondary" onClick={() => setScreen('preview')}>
-                  继续查看
+                  继续看这套
                 </button>
                 <button className="button button-tertiary" onClick={resetAll}>
                   清空重来
@@ -313,7 +315,7 @@ function App() {
         <section className="screen builder-screen">
           <article className="topbar-card">
             <div>
-              <p className="eyebrow">生成器</p>
+              <p className="eyebrow">捏题台</p>
               <h2>
                 {builderProgress.answered} / {builderProgress.total}
               </h2>
@@ -322,7 +324,7 @@ function App() {
               <div className="progress-bar">
                 <span style={{ width: `${builderProgress.percentage}%` }} />
               </div>
-              <p className="topbar-note">这些问题只决定问卷怎么长出来，不会反过来评价你。</p>
+              <p className="topbar-note">这些只是在挑这套题怎么长，不会顺手把你也测一遍。</p>
             </div>
           </article>
 
@@ -363,7 +365,7 @@ function App() {
               disabled={builderProgress.answered !== builderProgress.total}
               onClick={generateQuiz}
             >
-              生成问卷
+              长出这套
             </button>
           </div>
         </section>
@@ -378,25 +380,29 @@ function App() {
               <p className="hero-lede">{generatedQuiz.intro}</p>
               <div className="chip-row">
                 <span className="chip">{generatedQuiz.questions.length} 道题</span>
-                <span className="chip">{generatedQuiz.family}</span>
-                <span className="chip">{generatedQuiz.tonePack}</span>
+                <span className="chip">{activeVoicePack.label}</span>
+                {generatedQuiz.memeTags.slice(0, 2).map((tag) => (
+                  <span key={tag} className="chip">
+                    {tag}
+                  </span>
+                ))}
               </div>
               <div className="button-row">
                 <button className="button button-primary" disabled={shareBusy} onClick={handleCopyLink}>
-                  复制问卷链接
+                  {activeVoicePack.copyAction}
                 </button>
                 <button className="button button-secondary" disabled={shareBusy} onClick={handleNativeShare}>
-                  系统分享
+                  {activeVoicePack.shareAction}
                 </button>
                 <button className="button button-tertiary" onClick={startPlay}>
-                  我先做一遍
+                  {activeVoicePack.playAction}
                 </button>
               </div>
               {feedback && <p className="feedback-message">{feedback}</p>}
             </div>
 
             <div className="preview-sheet">
-              <p className="eyebrow">问卷预览</p>
+              <p className="eyebrow">{activeVoicePack.previewSheetLabel}</p>
               <ul className="sample-list">
                 {generatedQuiz.questions.slice(0, 3).map((question) => (
                   <li key={question.id}>{question.prompt}</li>
@@ -407,7 +413,7 @@ function App() {
 
           <div className="section-grid">
             <article className="info-card">
-              <p className="eyebrow">题目样例</p>
+              <p className="eyebrow">{activeVoicePack.previewEyebrow}</p>
               <div className="sample-cards">
                 {generatedQuiz.questions.slice(0, 4).map((question) => (
                   <article key={question.id} className="sample-card">
@@ -419,9 +425,9 @@ function App() {
             </article>
 
             <article className="meta-card">
-              <p className="eyebrow">项目入口</p>
+              <p className="eyebrow">来源</p>
               <h2>META-TI</h2>
-              <p>结果之外，这个项目关注的其实是问卷本身如何被做出来、被带走、再继续定义别人。</p>
+              <p>这套题是从 META-TI 那边长出来的。想看它为什么要做成现在这味，可以从这里回去看。</p>
               <button className="button button-secondary" onClick={openAbout}>
                 {appConfig.metaTiLinkLabel}
               </button>
@@ -483,7 +489,7 @@ function App() {
                   openAbout()
                 }}
               >
-                由 META-TI 生成
+                {activeVoicePack.resultSourceLabel}
               </a>
             </div>
             <div className="button-row compact-row">
@@ -502,13 +508,15 @@ function App() {
         <section className="screen result-screen">
           <article className="hero-card result-hero">
             <div className="hero-copy">
-              <p className="hero-brand">{appConfig.brandName}</p>
-              <h1>{result.outcome.title}</h1>
-              <p className="hero-lede">{result.outcome.summary}</p>
+              <p className="hero-brand">{activeVoicePack.resultEyebrow}</p>
+              <h1>{result.outcome.nickname}</h1>
+              <p className="hero-lede">{result.outcome.tagline}</p>
+              <p>{result.outcome.summary}</p>
               <div className="bullet-list">
-                {result.outcome.bullets.map((bullet) => (
-                  <span key={bullet} className="bullet-item">
-                    {bullet}
+                <span className="bullet-item">{result.outcome.shareLine}</span>
+                {generatedQuiz.memeTags.slice(0, 2).map((tag) => (
+                  <span key={tag} className="bullet-item">
+                    {tag}
                   </span>
                 ))}
               </div>
@@ -530,12 +538,12 @@ function App() {
           </article>
 
           <article className="meta-card result-meta-card">
-            <p className="eyebrow">问卷来源</p>
+            <p className="eyebrow">这套题</p>
             <h2>{generatedQuiz.title}</h2>
-            <p>这份结果来自一份由 TMTI 生成的完整问卷。想看这个项目本身，可以从下面的入口回到 META-TI。</p>
+            <p>{generatedQuiz.shareSubtitle}</p>
             <div className="button-row compact-row">
               <button className="button button-secondary" onClick={handleCopyLink}>
-                再复制一次问卷链接
+                再把这套发出去
               </button>
               <button className="button button-tertiary" onClick={openAbout}>
                 {appConfig.metaTiLinkLabel}
@@ -560,9 +568,9 @@ function App() {
           <article className="hero-card">
             <div className="hero-copy">
               <p className="hero-brand">META-TI</p>
-              <h1>从结果转向提问方式。</h1>
+              <h1>从“测出啥”转到“题是怎么长出来的”。</h1>
               <p className="hero-lede">
-                在这个版本里，主产物不再是一张人格结果卡，而是一份完整的中文问卷。它可以被继续分享、继续作答，也会把项目的关注点从“你是什么”转向“问卷本身是怎样被做出来的”。
+                这个版本里，主产物不再是一张结果卡，而是一套能继续被别人做完的测试。TMTI 负责把它长出来，META-TI 负责留下这个项目为什么要这样做的入口。
               </p>
               <div className="button-row">
                 <a className="button button-secondary" href={appConfig.repoUrl} target="_blank" rel="noreferrer">
@@ -577,16 +585,16 @@ function App() {
             <div className="about-grid">
               <article className="sample-card">
                 <strong>一阶用户</strong>
-                <p>负责生成问卷，不会被系统反过来评价。</p>
+                <p>只负责把一套题长出来，不会被系统反过来下结论。</p>
               </article>
               <article className="sample-card">
                 <strong>二阶用户</strong>
-                <p>打开链接后像普通测试一样一路做完并拿到结果。</p>
+                <p>打开链接后就当普通测试做，一路做完再拿自己的圈内外号。</p>
               </article>
               <article className="sample-card">
                 <strong>母体库</strong>
                 <p>
-                  当前内置 {manifest.themePackCount} 个题材包、{manifest.questionTemplateCount} 个题目母版、{manifest.sourceTraceCount} 条来源追踪。
+                  当前内置 {manifest.themePackCount} 个具体局、{manifest.questionTemplateCount} 个题目母版、{manifest.sourceTraceCount} 条来源追踪。
                 </p>
               </article>
             </div>

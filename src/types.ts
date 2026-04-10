@@ -3,11 +3,13 @@ export type Screen = 'intro' | 'builder' | 'preview' | 'play' | 'result' | 'abou
 export type ThemeToken = 'ember' | 'ink' | 'moss' | 'berry' | 'slate' | 'dusk' | 'linen' | 'glass'
 export type QuizFamily = 'boundary' | 'response' | 'stability' | 'exposure'
 export type TonePack = 'soft' | 'clean' | 'sharp' | 'observant'
+export type VoicePackId = 'groupchat' | 'shortvideo' | 'danmu'
 export type QuestionRole = 'theme' | 'mirror' | 'calibration'
 export type SourceKind = 'social' | 'forum' | 'editorial' | 'seed'
-export type BuilderScene = 'relationship' | 'friendship' | 'work' | 'mixed'
+export type BuilderScene = 'work' | 'game' | 'mixed'
 export type BuilderRhythm = 'scene' | 'judgment' | 'mixed'
 export type BuilderTitleStyle = 'plain' | 'essay' | 'crisp'
+export type SlangLevel = 'low' | 'medium' | 'high'
 
 export interface ThemePalette {
   paper: string
@@ -78,6 +80,20 @@ export interface ThemeSeed {
   sourceKinds: SourceKind[]
 }
 
+export interface VoicePack {
+  id: VoicePackId
+  label: string
+  previewEyebrow: string
+  previewSheetLabel: string
+  copyAction: string
+  shareAction: string
+  playAction: string
+  copyFeedback: string
+  nativeFeedback: string
+  resultEyebrow: string
+  resultSourceLabel: string
+}
+
 export interface GeneratedQuizOption {
   id: string
   label: string
@@ -93,6 +109,9 @@ export interface ThemePackQuestion {
   options: GeneratedQuizOption[]
   axisFocus: [string, string]
   sourceTraceIds: string[]
+  slangLevel?: SlangLevel
+  sceneTag?: string
+  voicePackOverrides?: Partial<Record<VoicePackId, string>>
 }
 
 export interface ThemePack {
@@ -103,11 +122,14 @@ export interface ThemePack {
   rhythm: BuilderRhythm
   tonePacks: TonePack[]
   themeToken: ThemeToken
-  tags: string[]
+  voicePackId: VoicePackId
+  memeTags: string[]
   questionIds: string[]
   outcomePackId: string
-  titleVariants: Record<TonePack, Record<BuilderTitleStyle, string>>
-  introVariants: Record<TonePack, string>
+  headlineVariants: Record<TonePack, Record<BuilderTitleStyle, string>>
+  hookVariants: Record<TonePack, string>
+  shareTitle: string
+  shareSubtitle: string
 }
 
 export interface OutcomeAxis {
@@ -120,9 +142,10 @@ export interface OutcomeAxis {
 export interface GeneratedQuizOutcome {
   id: string
   key: [lowHigh: 'low' | 'high', lowHigh: 'low' | 'high']
-  title: string
+  nickname: string
+  tagline: string
   summary: string
-  bullets: string[]
+  shareLine: string
 }
 
 export interface OutcomePack {
@@ -141,10 +164,14 @@ export interface GeneratedQuizDefinition {
   themePackId: string
   tonePack: TonePack
   themeToken: ThemeToken
+  voicePackId: VoicePackId
+  memeTags: string[]
   seed: number
   questionIds: string[]
   questions: ThemePackQuestion[]
   outcomePackId: string
+  shareTitle: string
+  shareSubtitle: string
   metaTiLink: string
 }
 
@@ -180,4 +207,3 @@ export interface ThemePackDraft {
   questions: ThemePackQuestion[]
   riskNote: string
 }
-

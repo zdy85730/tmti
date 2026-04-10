@@ -38,8 +38,8 @@ export async function shareQuizLink(definition: GeneratedQuizDefinition) {
 
   if (navigator.share) {
     await navigator.share({
-      title: definition.title,
-      text: definition.intro,
+      title: definition.shareTitle,
+      text: definition.shareSubtitle,
       url,
     })
     return url
@@ -47,4 +47,3 @@ export async function shareQuizLink(definition: GeneratedQuizDefinition) {
 
   return copyQuizLink(definition)
 }
-
