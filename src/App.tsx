@@ -57,11 +57,12 @@ function App() {
     : 0
 
   const gateStage = gateStages[Math.min(gateStages.length - 1, Math.floor((gateProgress / 100) * gateStages.length))]
-  const activePalette = themePalettes[resultSnapshot?.publicType.themeToken ?? 'ember']
+  const activePalette = themePalettes[resultSnapshot?.selectedCover.themeToken ?? 'ember']
   const revealState = resultSnapshot?.brandRevealState ?? 'tmti'
   const revealMetaVisible = revealState === 'meta-visible'
   const revealDraftVisible = revealState === 'draft-peek' || revealState === 'meta-visible'
   const exportPreviewShowsTrace = exportMode === 'cover-with-trace'
+  const residueLabel = resultSnapshot?.cutWords.length ? '裁切' : '边角'
 
   useEffect(() => {
     const { pending, snapshot } = loadResultSession()
@@ -100,9 +101,7 @@ function App() {
         clearPendingResult()
         setPendingResult(null)
         setScreen('result')
-        track('result_revealed', {
-          source: 'timer',
-        })
+        track('result_revealed', { source: 'timer' })
       }
     }
 
@@ -122,9 +121,7 @@ function App() {
     setExportMode(DEFAULT_EXPORT_MODE)
     setExportMessage('')
     setScreen('quiz')
-    track('quiz_started', {
-      questionCount: 24,
-    })
+    track('quiz_started', { questionCount: 24 })
   }
 
   function goHome() {
@@ -153,7 +150,7 @@ function App() {
     setExportMode(snapshot.defaultExportMode)
     setScreen('gate')
     track('quiz_completed', {
-      publicType: snapshot.publicType.code,
+      selectedCover: snapshot.selectedCover.code,
       coverCandidate: snapshot.candidatePool[0]?.code,
     })
   }
@@ -193,7 +190,7 @@ function App() {
       setExportMessage(nextMode === 'cover' ? '已导出。' : '已导出扩展版。')
       track('result_exported', {
         mode: nextMode,
-        publicType: resultSnapshot.publicType.code,
+        selectedCover: resultSnapshot.selectedCover.code,
       })
     } finally {
       setDownloadBusy(false)
@@ -325,7 +322,7 @@ function App() {
               <p className="gate-stage">{gateStage}</p>
             </div>
             <div className="gate-preview">
-              <ResultPoster profile={resultSnapshot.publicType} chips={resultSnapshot.coverWords} compact />
+              <ResultPoster profile={resultSnapshot.selectedCover} chips={resultSnapshot.coverWords} compact />
             </div>
           </article>
         </section>
@@ -338,108 +335,95 @@ function App() {
           onWheel={handleResultInteraction}
           onTouchMove={handleResultInteraction}
         >
-          <div className={`result-stack ${revealDraftVisible ? 'reveal-draft' : ''} ${revealMetaVisible ? 'reveal-meta' : ''}`}>
-            <article className="draft-card">
-              <div className="draft-card-head">
-                <small>{revealMetaVisible ? 'META-TI' : resultSnapshot.draftResidue.marginNote ?? '...'}</small>
+          <article
+            className="candidate-stage-card"
+            style={{ ['--accent-soft' as string]: activePalette.accentSoft } as CSSProperties}
+            onPointerDown={handleResultInteraction}
+          >
+            <div className="candidate-stage-grid">
+              <div className="selected-cover-sheet">
+                <div className="cover-topbar">
+                  <p className="hero-brand">TMTI</p>
+                  <span className="selection-state">定稿</span>
+                </div>
+                <p className="eyebrow">结果</p>
+                <h2>{resultSnapshot.selectedCover.name}</h2>
+                <p className="cover-definition">{resultSnapshot.selectedCover.shortDefinition}</p>
+                <p className="cover-subtitle">{resultSnapshot.selectedCover.subtitle}</p>
+                <div className="descriptor-row">
+                  {resultSnapshot.coverWords.map((descriptor) => (
+                    <span key={descriptor} className="descriptor-chip">
+                      {descriptor}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="draft-mark-cloud">
-                {resultSnapshot.draftResidue.marks.map((mark) => (
+
+              <aside className={`candidate-pool ${revealDraftVisible ? 'active' : ''}`}>
+                {resultSnapshot.candidatePool.map((candidate, index) => (
+                  <article key={candidate.code} className={`candidate-card ${index === 0 ? 'selected' : 'ghost'}`}>
+                    <small>{index === 0 ? '当前' : '备选'}</small>
+                    <strong>{candidate.name}</strong>
+                    <div className="candidate-reason-row">
+                      {candidate.reasonWords.map((word) => (
+                        <span key={`${candidate.code}-${word}`}>{word}</span>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </aside>
+            </div>
+          </article>
+
+          <section className={`residue-section ${revealDraftVisible ? 'active' : ''}`}>
+            <div className="residue-header">
+              <p className="eyebrow">边角</p>
+              {revealMetaVisible && <small className="export-meta-tag">META-TI</small>}
+            </div>
+
+            <div className="residue-layout">
+              <div className="residue-mark-wall">
+                {resultSnapshot.residueMarks.map((mark) => (
                   <span
                     key={`${mark.tone}-${mark.text}`}
-                    className={`draft-mark tone-${mark.tone} ${mark.strike ? 'strike' : ''}`}
+                    className={`residue-mark tone-${mark.tone} ${mark.strike ? 'strike' : ''}`}
                   >
                     {mark.text}
                   </span>
                 ))}
               </div>
-            </article>
 
-            <article
-              className="cover-card"
-              style={{ ['--accent-soft' as string]: activePalette.accentSoft } as CSSProperties}
-              onPointerDown={handleResultInteraction}
-            >
-              <div className="cover-topbar">
-                <p className="hero-brand">TMTI</p>
+              <div className="trace-grid">
+                {resultSnapshot.traceNotes.map((note) => (
+                  <article key={note.text} className="trace-card">
+                    <p>{note.text}</p>
+                  </article>
+                ))}
               </div>
-
-              <div className="cover-grid">
-                <div className="cover-copy">
-                  <p className="eyebrow">结果</p>
-                  <h2>{resultSnapshot.publicType.name}</h2>
-                  <p className="cover-definition">{resultSnapshot.publicType.shortDefinition}</p>
-                  <p className="cover-subtitle">{resultSnapshot.publicType.subtitle}</p>
-
-                  <div className={`candidate-row ${revealDraftVisible ? 'active' : ''}`}>
-                    {resultSnapshot.candidatePool.map((candidate, index) => (
-                      <span key={candidate.code} className={`candidate-chip ${index === 0 ? 'selected' : 'ghost'}`}>
-                        {candidate.name}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="descriptor-row">
-                    {resultSnapshot.coverWords.map((descriptor) => (
-                      <span key={descriptor} className="descriptor-chip">
-                        {descriptor}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className={`cover-glitch-row ${revealDraftVisible ? 'active' : ''}`}>
-                    {resultSnapshot.cutWords.slice(0, 2).map((word) => (
-                      <span key={word} className="glitch-chip cut">
-                        {word}
-                      </span>
-                    ))}
-                    {resultSnapshot.conflictEvidence.slice(0, 2).map((conflict) => (
-                      <span key={`${conflict.cue}-${conflict.before}-${conflict.after}`} className="glitch-chip conflict">
-                        {conflict.before} {'->'} {conflict.after}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <ResultPoster profile={resultSnapshot.publicType} chips={resultSnapshot.coverWords} />
-              </div>
-            </article>
-          </div>
-
-          <div className={`trace-grid ${revealDraftVisible ? 'active' : ''}`}>
-            {resultSnapshot.traceNotes.map((note) => (
-              <article key={note.text} className="trace-card">
-                <p>{note.text}</p>
-              </article>
-            ))}
-          </div>
+            </div>
+          </section>
 
           <article className="export-card" onPointerEnter={handlePreviewInspect}>
             <div className="export-header">
               <p className="eyebrow">预览</p>
+              <small className="preview-status">{exportPreviewShowsTrace ? '带上边角' : '只带成品'}</small>
               {revealMetaVisible && <small className="export-meta-tag">META-TI</small>}
             </div>
 
             <div className={`export-preview ${revealDraftVisible ? 'peeked' : ''} ${exportPreviewShowsTrace ? 'with-trace' : ''}`}>
               <div className="export-preview-draft">
-                <span>{revealMetaVisible ? 'META-TI' : resultSnapshot.draftResidue.marginNote ?? '...'}</span>
+                <span>{revealMetaVisible ? 'META-TI' : residueLabel}</span>
                 <div className="export-preview-draft-marks">
-                  {resultSnapshot.draftResidue.marks.slice(0, 4).map((mark) => (
+                  {resultSnapshot.residueMarks.slice(0, 5).map((mark) => (
                     <p key={`${mark.tone}-${mark.text}`} className={`${mark.strike ? 'strike' : ''} tone-${mark.tone}`}>
                       {mark.text}
                     </p>
                   ))}
                 </div>
               </div>
+
               <div className="export-preview-cover">
-                <span>TMTI</span>
-                <strong>{resultSnapshot.publicType.name}</strong>
-                <p>{resultSnapshot.publicType.subtitle}</p>
-                <div className="export-preview-cover-chips">
-                  {resultSnapshot.coverWords.map((word) => (
-                    <i key={word}>{word}</i>
-                  ))}
-                </div>
+                <ResultPoster profile={resultSnapshot.selectedCover} chips={resultSnapshot.coverWords} compact />
               </div>
             </div>
 

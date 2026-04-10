@@ -169,7 +169,7 @@ function drawDraftResidue(
   context.stroke()
 
   context.font = '500 17px "Noto Sans SC", sans-serif'
-  snapshot.draftResidue.marks.slice(0, 5).forEach((mark, index) => {
+  snapshot.residueMarks.slice(0, 5).forEach((mark, index) => {
     const lineY = y + 88 + index * 44
 
     context.fillStyle = mark.tone === 'alternate' ? '#8a857f' : '#6d6862'
@@ -188,7 +188,7 @@ function drawDraftResidue(
 
   context.fillStyle = '#8a8682'
   context.font = '500 16px "Noto Sans SC", sans-serif'
-  const cornerNote = mode === 'cover-with-trace' ? 'META-TI' : snapshot.draftResidue.marginNote
+  const cornerNote = mode === 'cover-with-trace' ? 'META-TI' : snapshot.cutWords.length ? '裁切' : '边角'
   if (cornerNote) {
     context.fillText(cornerNote, x + width - 92, y + 36)
   }
@@ -202,7 +202,7 @@ function drawCoverCard(
   width: number,
   height: number,
 ) {
-  const palette = themePalettes[snapshot.publicType.themeToken]
+  const palette = themePalettes[snapshot.selectedCover.themeToken]
 
   drawRoundedRect(context, x, y, width, height, 40)
   context.fillStyle = palette.paper
@@ -229,7 +229,7 @@ function drawCoverCard(
   context.fill()
   context.strokeStyle = palette.line
   context.stroke()
-  drawMotif(context, snapshot.publicType.motif, posterX, posterY, posterWidth, posterHeight, palette.accent, palette.ghost)
+  drawMotif(context, snapshot.selectedCover.motif, posterX, posterY, posterWidth, posterHeight, palette.accent, palette.ghost)
 
   context.fillStyle = palette.accent
   context.font = '700 20px "Space Grotesk", sans-serif'
@@ -237,12 +237,12 @@ function drawCoverCard(
 
   context.fillStyle = palette.text
   context.font = '700 28px "Space Grotesk", sans-serif'
-  context.fillText(snapshot.publicType.code, posterX + 30, posterY + 108)
+  context.fillText(snapshot.selectedCover.code, posterX + 30, posterY + 108)
   context.font = '700 54px "Noto Serif SC", serif'
-  context.fillText(snapshot.publicType.name, posterX + 30, posterY + 178)
+  context.fillText(snapshot.selectedCover.name, posterX + 30, posterY + 178)
 
   context.font = '500 24px "Noto Sans SC", sans-serif'
-  wrapText(context, snapshot.publicType.subtitle, posterX + 30, posterY + 228, posterWidth - 60, 36)
+  wrapText(context, snapshot.selectedCover.subtitle, posterX + 30, posterY + 228, posterWidth - 60, 36)
 
   context.font = '600 19px "Noto Sans SC", sans-serif'
   snapshot.coverWords.forEach((descriptor, index) => {
@@ -257,10 +257,10 @@ function drawCoverCard(
 
   context.fillStyle = palette.text
   context.font = '700 44px "Noto Serif SC", serif'
-  context.fillText(snapshot.publicType.name, x + 52, y + 620)
+  context.fillText(snapshot.selectedCover.name, x + 52, y + 620)
 
   context.font = '500 26px "Noto Sans SC", sans-serif'
-  wrapText(context, snapshot.publicType.shortDefinition, x + 52, y + 676, width - 104, 38)
+  wrapText(context, snapshot.selectedCover.shortDefinition, x + 52, y + 676, width - 104, 38)
 }
 
 function drawTraceFooter(
@@ -287,7 +287,7 @@ export async function downloadShareCard(result: ResultSnapshot, mode: ExportMode
     throw new Error('Canvas rendering is unavailable.')
   }
 
-  const palette = themePalettes[result.publicType.themeToken]
+  const palette = themePalettes[result.selectedCover.themeToken]
   const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
   gradient.addColorStop(0, '#fcfaf6')
   gradient.addColorStop(0.55, palette.accentSoft)
@@ -307,6 +307,6 @@ export async function downloadShareCard(result: ResultSnapshot, mode: ExportMode
 
   const link = document.createElement('a')
   link.href = canvas.toDataURL('image/png')
-  link.download = `tmti-${result.publicType.code.toLowerCase()}-${mode}.png`
+  link.download = `tmti-${result.selectedCover.code.toLowerCase()}-${mode}.png`
   link.click()
 }

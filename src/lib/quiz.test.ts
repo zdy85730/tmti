@@ -15,7 +15,7 @@ describe('computeResult', () => {
 
     const snapshot = computeResult(answersFromTarget(steady!.target))
 
-    expect(snapshot.publicType.code).toBe('STEADY')
+    expect(snapshot.selectedCover.code).toBe('STEADY')
     expect(snapshot.candidatePool.length).toBe(3)
     expect(snapshot.candidatePool[0]?.code).toBe('STEADY')
     expect(snapshot.coverWords.length).toBeGreaterThanOrEqual(3)
@@ -44,8 +44,8 @@ describe('computeResult', () => {
     expect(snapshot.conflictEvidence.length).toBeGreaterThan(0)
     expect(snapshot.conflictEvidence.some((entry) => entry.before.includes('留白'))).toBe(true)
     expect(snapshot.cutWords.some((word) => word.includes('需要被确认') || word.includes('想确认关系'))).toBe(true)
-    expect(snapshot.draftResidue.marks.length).toBeGreaterThanOrEqual(4)
-    expect(snapshot.draftResidue.marks.some((mark) => mark.tone === 'cut' && mark.strike)).toBe(true)
+    expect(snapshot.residueMarks.length).toBeGreaterThanOrEqual(4)
+    expect(snapshot.residueMarks.some((mark) => mark.tone === 'cut' && mark.strike)).toBe(true)
     expect(snapshot.traceNotes.some((note) => note.text.includes('->'))).toBe(true)
   })
 })

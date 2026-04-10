@@ -43,6 +43,7 @@ export interface PublicTypeProfile {
 export interface QuestionOutcomeConfig {
   coverTokens?: Record<QuizValue, string[]>
   cutTokens?: Record<QuizValue, string[]>
+  candidateHints?: Record<QuizValue, string[]>
   priorityWeights?: Record<QuizValue, number>
   conflictCue?: string
 }
@@ -67,11 +68,6 @@ export interface ResidueMark {
   strike?: boolean
 }
 
-export interface DraftResidue {
-  marks: ResidueMark[]
-  marginNote?: string
-}
-
 export interface TraceNote {
   text: string
 }
@@ -79,12 +75,12 @@ export interface TraceNote {
 export interface ResultSnapshot {
   axisScores: Record<AxisId, number>
   axisLevels: Record<AxisId, QuizValue>
-  publicType: PublicTypeProfile
+  selectedCover: PublicTypeProfile
   candidatePool: ResultCandidate[]
   coverWords: string[]
   cutWords: string[]
   conflictEvidence: ConflictEvidence[]
-  draftResidue: DraftResidue
+  residueMarks: ResidueMark[]
   traceNotes: TraceNote[]
   brandRevealState: BrandRevealState
   defaultExportMode: ExportMode

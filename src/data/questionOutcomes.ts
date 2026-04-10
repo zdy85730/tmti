@@ -6,6 +6,11 @@ const publicRegular: QuestionOutcomeConfig = {
     2: ['说话留余地', '会修整说法'],
     3: ['顺手体面', '公开感强', '说法稳当'],
   },
+  candidateHints: {
+    1: ['VEIL', 'LATE'],
+    2: ['BUFFER', 'MIRROR'],
+    3: ['FRAME', 'STEADY', 'MIRROR'],
+  },
   priorityWeights: {
     1: 1,
     2: 2,
@@ -15,6 +20,11 @@ const publicRegular: QuestionOutcomeConfig = {
 
 const publicPreference: QuestionOutcomeConfig = {
   ...publicRegular,
+  candidateHints: {
+    1: ['VEIL', 'LATE'],
+    2: ['BUFFER', 'MIRROR', 'CLEAR'],
+    3: ['FRAME', 'STEADY', 'CLEAR'],
+  },
   priorityWeights: {
     1: 1,
     2: 3,
@@ -28,6 +38,11 @@ const boundaryRegular: QuestionOutcomeConfig = {
     2: ['会先观察', '说话留余地'],
     3: ['边界清楚', '边界感明确', '克制'],
   },
+  candidateHints: {
+    1: ['BUFFER', 'ECHO', 'LATE'],
+    2: ['MIRROR', 'VEIL', 'BUFFER'],
+    3: ['STEADY', 'FRAME', 'CLEAR'],
+  },
   priorityWeights: {
     1: 1,
     2: 2,
@@ -37,6 +52,11 @@ const boundaryRegular: QuestionOutcomeConfig = {
 
 const boundaryPreference: QuestionOutcomeConfig = {
   ...boundaryRegular,
+  candidateHints: {
+    1: ['BUFFER', 'ECHO'],
+    2: ['VEIL', 'LATE'],
+    3: ['STEADY', 'FRAME', 'CLEAR'],
+  },
   priorityWeights: {
     1: 1,
     2: 3,
@@ -50,6 +70,11 @@ const stabilityRegular: QuestionOutcomeConfig = {
     2: ['看起来稳定', '会修整说法'],
     3: ['自我叙述稳定', '说法稳当', '清楚'],
   },
+  candidateHints: {
+    1: ['ECHO', 'MIRROR'],
+    2: ['BUFFER', 'LATE', 'MIRROR'],
+    3: ['CLEAR', 'STEADY', 'FRAME'],
+  },
   priorityWeights: {
     1: 1,
     2: 2,
@@ -59,6 +84,11 @@ const stabilityRegular: QuestionOutcomeConfig = {
 
 const stabilityPreference: QuestionOutcomeConfig = {
   ...stabilityRegular,
+  candidateHints: {
+    1: ['ECHO', 'MIRROR'],
+    2: ['MIRROR', 'BUFFER', 'LATE'],
+    3: ['CLEAR', 'STEADY', 'FRAME'],
+  },
   priorityWeights: {
     1: 1,
     2: 3,
@@ -71,6 +101,11 @@ const exposureRegular: QuestionOutcomeConfig = {
     1: ['也会想解释', '直接表达'],
     2: ['并非完全不在意', '需要外部反馈'],
     3: ['怕被误解', '想确认关系', '需要被确认'],
+  },
+  candidateHints: {
+    1: ['FRAME', 'STEADY'],
+    2: ['VEIL', 'MIRROR', 'BUFFER'],
+    3: ['CLEAR', 'ECHO', 'LATE'],
   },
 }
 

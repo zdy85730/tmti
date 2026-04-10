@@ -5,16 +5,17 @@ import { DEFAULT_EXPORT_MODE } from './reveal'
 import type {
   AxisId,
   ConflictEvidence,
-  DraftResidue,
   PublicTypeProfile,
   QuizQuestion,
   QuizValue,
+  ResidueMark,
   ResultCandidate,
   ResultSnapshot,
   TraceNote,
 } from '../types'
 
 type TokenWeights = Record<string, number>
+type CandidateWeights = Record<string, number>
 
 interface RankedCandidate extends ResultCandidate {
   profile: PublicTypeProfile
@@ -64,6 +65,16 @@ function addTokens(bucket: TokenWeights, tokens: string[] | undefined, weight = 
   })
 }
 
+function addCandidateHints(bucket: CandidateWeights, hints: string[] | undefined, weight = 1) {
+  if (!hints?.length) {
+    return
+  }
+
+  hints.forEach((code) => {
+    bucket[code] = (bucket[code] ?? 0) + weight
+  })
+}
+
 function pickEvidenceWord(questionId: string, answer: QuizValue) {
   const outcome = questionOutcomeMap[questionId]
 
@@ -74,10 +85,10 @@ function pickEvidenceWord(questionId: string, answer: QuizValue) {
   return outcome.cutTokens?.[answer]?.[0] ?? outcome.coverTokens?.[answer]?.[0] ?? null
 }
 
-function collectOutcomeTokens(answers: Record<string, number>) {
+function collectOutcomeSignals(answers: Record<string, number>) {
   const coverWeights: TokenWeights = {}
   const cutWeights: TokenWeights = {}
-  let coverPriority = 0
+  const candidateWeights: CandidateWeights = {}
 
   questions.forEach((question) => {
     const answer = answers[question.id] as QuizValue | undefined
@@ -92,17 +103,17 @@ function collectOutcomeTokens(answers: Record<string, number>) {
       return
     }
 
-    const priority = outcome.priorityWeights?.[answer] ?? 0
-    coverPriority += priority
+    const priority = outcome.priorityWeights?.[answer] ?? 1
 
-    addTokens(coverWeights, outcome.coverTokens?.[answer], Math.max(1, priority))
+    addTokens(coverWeights, outcome.coverTokens?.[answer], priority)
     addTokens(cutWeights, outcome.cutTokens?.[answer], 1)
+    addCandidateHints(candidateWeights, outcome.candidateHints?.[answer], priority)
   })
 
   return {
     coverWeights,
     cutWeights,
-    coverPriority,
+    candidateWeights,
   }
 }
 
@@ -142,8 +153,8 @@ function buildCandidatePool(
   levels: Record<AxisId, QuizValue>,
   coverWeights: TokenWeights,
   cutWeights: TokenWeights,
+  candidateWeights: CandidateWeights,
   conflicts: ConflictEvidence[],
-  coverPriority: number,
 ): RankedCandidate[] {
   const hardConflictCount = conflicts.filter((conflict) => conflict.severity === 'hard').length
 
@@ -156,43 +167,18 @@ function buildCandidatePool(
         Math.abs(profile.target.stability - levels.stability)
 
       const coverFit = profile.acceptedDescriptors.reduce((total, word) => total + (coverWeights[word] ?? 0), 0)
-      const shadowFit = profile.withheldDescriptors.reduce((total, word) => total + (cutWeights[word] ?? 0), 0)
+      const cutFit = profile.withheldDescriptors.reduce((total, word) => total + (cutWeights[word] ?? 0), 0)
+      const candidateHintFit = candidateWeights[profile.code] ?? 0
+      const conflictFit =
+        profile.code === 'MIRROR'
+          ? hardConflictCount * 10 + conflicts.length * 4
+          : profile.code === 'ECHO'
+            ? hardConflictCount * 6
+            : profile.code === 'LATE'
+              ? hardConflictCount * 2
+              : 0
 
-      let tensionFit = 0
-
-      if (profile.code === 'MIRROR') {
-        tensionFit += conflicts.length * 8
-      }
-
-      if (profile.code === 'ECHO') {
-        tensionFit += hardConflictCount * 6
-      }
-
-      if (profile.code === 'FRAME') {
-        tensionFit += (coverWeights['顺手体面'] ?? 0) * 4
-      }
-
-      if (profile.code === 'STEADY') {
-        tensionFit += (coverWeights['边界清楚'] ?? 0) * 4
-      }
-
-      if (profile.code === 'CLEAR') {
-        tensionFit += (coverWeights['清楚'] ?? 0) * 4
-      }
-
-      if (profile.code === 'VEIL') {
-        tensionFit += (coverWeights['留白'] ?? 0) * 4
-      }
-
-      if (profile.code === 'BUFFER') {
-        tensionFit += (coverWeights['好接近'] ?? 0) * 4
-      }
-
-      if (profile.code === 'LATE') {
-        tensionFit += (coverWeights['会先观察'] ?? 0) * 4
-      }
-
-      const score = 96 - distance * 14 + coverFit * 6 + shadowFit * 3 + tensionFit + coverPriority
+      const score = 110 - distance * 12 + candidateHintFit * 9 + coverFit * 4 + cutFit * 2 + conflictFit
       const reasonWords = Array.from(
         new Set([
           ...profile.acceptedDescriptors.filter((word) => (coverWeights[word] ?? 0) > 0),
@@ -234,14 +220,14 @@ function pickCutWords(profile: PublicTypeProfile, cutWeights: TokenWeights) {
 
   const fallback = profile.withheldDescriptors.filter((word) => !weighted.includes(word))
 
-  return [...weighted, ...fallback].slice(0, 3)
+  return [...weighted, ...fallback].slice(0, 4)
 }
 
-function buildDraftResidue(
+function buildResidueMarks(
   cutWords: string[],
   conflicts: ConflictEvidence[],
   candidates: RankedCandidate[],
-): DraftResidue {
+): ResidueMark[] {
   const marks = [
     ...cutWords.slice(0, 3).map((word) => ({
       text: word,
@@ -261,10 +247,7 @@ function buildDraftResidue(
       })),
   ]
 
-  return {
-    marks: marks.slice(0, 6),
-    marginNote: cutWords.length ? '裁切' : '边角',
-  }
+  return marks.slice(0, 7)
 }
 
 function buildTraceNotes(
@@ -307,18 +290,18 @@ export function buildQuestionDeck() {
 export function computeResult(answers: Record<string, number>): ResultSnapshot {
   const axisScores = buildAxisScores(answers)
   const axisLevels = buildAxisLevels(axisScores)
-  const { coverWeights, cutWeights, coverPriority } = collectOutcomeTokens(answers)
+  const { coverWeights, cutWeights, candidateWeights } = collectOutcomeSignals(answers)
   const conflictEvidence = buildConflictEvidence(answers)
-  const candidatePool = buildCandidatePool(axisLevels, coverWeights, cutWeights, conflictEvidence, coverPriority)
-  const selectedCandidate = candidatePool[0]
-  const publicType = selectedCandidate?.profile ?? publicTypeProfiles[0]
-  const coverWords = pickCoverWords(publicType, coverWeights)
-  const cutWords = pickCutWords(publicType, cutWeights)
+  const candidatePool = buildCandidatePool(axisLevels, coverWeights, cutWeights, candidateWeights, conflictEvidence)
+  const selectedCover = candidatePool[0]?.profile ?? publicTypeProfiles[0]
+  const coverWords = pickCoverWords(selectedCover, coverWeights)
+  const cutWords = pickCutWords(selectedCover, cutWeights)
+  const residueMarks = buildResidueMarks(cutWords, conflictEvidence, candidatePool)
 
   return {
     axisScores,
     axisLevels,
-    publicType,
+    selectedCover,
     candidatePool: candidatePool.map((candidate) => ({
       code: candidate.code,
       name: candidate.name,
@@ -328,7 +311,7 @@ export function computeResult(answers: Record<string, number>): ResultSnapshot {
     coverWords,
     cutWords,
     conflictEvidence,
-    draftResidue: buildDraftResidue(cutWords, conflictEvidence, candidatePool),
+    residueMarks,
     traceNotes: buildTraceNotes(conflictEvidence, cutWords, candidatePool),
     brandRevealState: 'tmti',
     defaultExportMode: DEFAULT_EXPORT_MODE,
