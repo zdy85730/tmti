@@ -1,5 +1,5 @@
 import { themePalettes } from '../data/themeTokens'
-import type { DraftFragment, ExportMode, ResultSnapshot } from '../types'
+import type { ExportMode, ResultSnapshot } from '../types'
 
 function wrapText(
   context: CanvasRenderingContext2D,
@@ -152,9 +152,10 @@ function drawMotif(
   context.restore()
 }
 
-function drawDraftCard(
+function drawDraftResidue(
   context: CanvasRenderingContext2D,
   snapshot: ResultSnapshot,
+  mode: ExportMode,
   x: number,
   y: number,
   width: number,
@@ -167,25 +168,23 @@ function drawDraftCard(
   context.lineWidth = 2
   context.stroke()
 
-  context.fillStyle = '#5e5a56'
-  context.font = '600 22px "Noto Sans SC", sans-serif'
-  context.fillText(snapshot.draftCard.title, x + 36, y + 54)
-
   context.fillStyle = '#6d6862'
   context.font = '500 17px "Noto Sans SC", sans-serif'
-  snapshot.draftCard.fragments.slice(0, 3).forEach((fragment: DraftFragment, index) => {
-    context.fillText(`${fragment.label}：${fragment.text}`, x + 36, y + 110 + index * 48)
+  snapshot.draftResidue.lines.slice(0, 3).forEach((line, index) => {
+    context.fillText(line, x + 36, y + 96 + index * 48)
   })
 
   context.fillStyle = '#8a8682'
   context.font = '500 16px "Noto Sans SC", sans-serif'
-  wrapText(context, snapshot.draftCard.note, x + 36, y + height - 40, width - 72, 24)
+  const cornerNote = mode === 'cover-with-trace' ? 'META-TI' : snapshot.draftResidue.marginNote
+  if (cornerNote) {
+    context.fillText(cornerNote, x + width - 92, y + 36)
+  }
 }
 
 function drawCoverCard(
   context: CanvasRenderingContext2D,
   snapshot: ResultSnapshot,
-  mode: ExportMode,
   x: number,
   y: number,
   width: number,
@@ -223,9 +222,6 @@ function drawCoverCard(
   context.fillStyle = palette.accent
   context.font = '700 20px "Space Grotesk", sans-serif'
   context.fillText('TMTI', posterX + 30, posterY + 42)
-  context.globalAlpha = 0.48
-  context.fillText('PUBLIC CARD', posterX + posterWidth - 170, posterY + 42)
-  context.globalAlpha = 1
 
   context.fillStyle = palette.text
   context.font = '700 28px "Space Grotesk", sans-serif'
@@ -253,16 +249,6 @@ function drawCoverCard(
 
   context.font = '500 26px "Noto Sans SC", sans-serif'
   wrapText(context, snapshot.publicType.shortDefinition, x + 52, y + 676, width - 104, 38)
-
-  context.fillStyle = palette.subtext
-  context.font = '500 20px "Noto Sans SC", sans-serif'
-  context.fillText('默认导出的是更容易认领的版本', x + 52, y + height - 112)
-
-  if (mode === 'cover-with-trace') {
-    context.fillStyle = palette.subtext
-    context.font = '600 18px "Space Grotesk", sans-serif'
-    context.fillText('META-TI', x + width - 130, y + 46)
-  }
 }
 
 function drawTraceFooter(
@@ -271,14 +257,10 @@ function drawTraceFooter(
   x: number,
   y: number,
 ) {
-  context.fillStyle = '#4f4a45'
-  context.font = '700 18px "Noto Sans SC", sans-serif'
-  context.fillText('留痕', x, y)
-
   context.fillStyle = '#69645f'
   context.font = '500 18px "Noto Sans SC", sans-serif'
   snapshot.traceNotes.forEach((note, index) => {
-    context.fillText(`- ${note.text}`, x, y + 36 + index * 28)
+    context.fillText(`- ${note.text}`, x, y + index * 28)
   })
 }
 
@@ -302,10 +284,10 @@ export async function downloadShareCard(result: ResultSnapshot, mode: ExportMode
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   if (mode === 'cover-with-trace') {
-    drawDraftCard(context, result, 132, 214, 840, 340)
+    drawDraftResidue(context, result, mode, 132, 214, 840, 300)
   }
 
-  drawCoverCard(context, result, mode, 170, 104, 900, 1150)
+  drawCoverCard(context, result, 170, 104, 900, 1150)
 
   if (mode === 'cover-with-trace') {
     drawTraceFooter(context, result, 170, 1324)

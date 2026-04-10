@@ -38,8 +38,10 @@ describe('computeResult', () => {
 
     const snapshot = computeResult(answers)
 
-    expect(snapshot.draftCard.fragments.some((fragment) => fragment.label === '保留描述')).toBe(true)
-    expect(snapshot.draftCard.fragments.find((fragment) => fragment.label === '多次回避')?.text).toContain('需要回应')
+    expect(snapshot.draftResidue.lines.length).toBeGreaterThanOrEqual(2)
+    expect(snapshot.draftResidue.lines.length).toBeLessThanOrEqual(4)
+    expect(snapshot.draftResidue.lines.some((line) => line.includes('更容易公开认领'))).toBe(true)
+    expect(snapshot.draftResidue.lines.some((line) => line.includes('需要回应'))).toBe(true)
     expect(snapshot.traceNotes.some((note) => note.text.includes('顺口'))).toBe(true)
   })
 })

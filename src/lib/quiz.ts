@@ -3,8 +3,7 @@ import { questions } from '../data/questions'
 import { DEFAULT_EXPORT_MODE } from './reveal'
 import type {
   AxisId,
-  DraftCard,
-  DraftFragment,
+  DraftResidue,
   PublicTypeProfile,
   QuizQuestion,
   ResultSnapshot,
@@ -75,22 +74,6 @@ function rankPublicTypes(levels: Record<AxisId, 1 | 2 | 3>) {
     .sort((left, right) => left.distance - right.distance)
 }
 
-function pickDraftTitle(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number) {
-  if (mirrorBias >= 2) {
-    return '另一种读法'
-  }
-
-  if (levels.exposure === 3) {
-    return '未上封面的部分'
-  }
-
-  if (levels.boundary === 1) {
-    return '保留片段'
-  }
-
-  return '侧写留痕'
-}
-
 function buildAvoidedText(levels: Record<AxisId, 1 | 2 | 3>) {
   if (levels.exposure === 3) {
     return '需要回应、怕被误解、想确认关系'
@@ -122,54 +105,38 @@ function buildWithheldText(profile: PublicTypeProfile, levels: Record<AxisId, 1 
   return Array.from(new Set(merged)).slice(0, 3).join('、')
 }
 
-function buildOptionalFragment(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number): DraftFragment | null {
+function buildOptionalResidue(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number) {
   if (mirrorBias >= 2) {
-    return {
-      label: '保留描述',
-      text: '你会先选更容易公开认领的说法',
-    }
+    return '会先选更容易公开认领的说法'
   }
 
   if (levels.stability === 1) {
-    return {
-      label: '保留描述',
-      text: '不同场合会换一层语气，封面只留下最稳的一版',
-    }
+    return '不同场合会换一层语气，只留下最稳的一句'
   }
 
   return null
 }
 
-function buildDraftCard(
+function buildDraftResidue(
   profile: PublicTypeProfile,
   levels: Record<AxisId, 1 | 2 | 3>,
   mirrorBias: number,
-): DraftCard {
-  const fragments: DraftFragment[] = [
-    {
-      label: '更快接受',
-      text: profile.acceptedDescriptors.slice(0, 3).join('、'),
-    },
-    {
-      label: '多次回避',
-      text: buildAvoidedText(levels),
-    },
-    {
-      label: '未进入封面',
-      text: buildWithheldText(profile, levels),
-    },
+): DraftResidue {
+  const lines = [
+    profile.acceptedDescriptors.slice(0, 3).join('、'),
+    buildAvoidedText(levels),
+    buildWithheldText(profile, levels),
   ]
 
-  const optional = buildOptionalFragment(levels, mirrorBias)
+  const optional = buildOptionalResidue(levels, mirrorBias)
 
   if (optional) {
-    fragments.push(optional)
+    lines.push(optional)
   }
 
   return {
-    title: pickDraftTitle(levels, mirrorBias),
-    fragments,
-    note: levels.exposure === 3 ? '这部分被保留下来，但没有上封面。' : '该部分未进入默认展示。',
+    lines: lines.slice(0, 4),
+    marginNote: levels.exposure === 3 ? '未导出' : '保留',
   }
 }
 
@@ -179,27 +146,27 @@ function buildTraceNotes(levels: Record<AxisId, 1 | 2 | 3>, mirrorBias: number):
   if (mirrorBias >= 2) {
     notes.push({ text: '你更快接受顺口说法' })
   } else if (levels.public === 3) {
-    notes.push({ text: '可公开性被优先保留' })
+    notes.push({ text: '顺手表达被更早选中' })
   } else {
-    notes.push({ text: '封面保留了一点留白' })
+    notes.push({ text: '留白感被保留下来' })
   }
 
   if (levels.exposure === 3) {
     notes.push({ text: '高暴露描述多次未入选' })
   } else if (levels.exposure === 2) {
-    notes.push({ text: '暴露感被压到后层' })
+    notes.push({ text: '高暴露表达被往后放' })
   } else {
-    notes.push({ text: '直接表达没有被删掉' })
+    notes.push({ text: '直接表达保留得更多' })
   }
 
   if (levels.boundary === 3) {
-    notes.push({ text: '边界语气先上了封面' })
+    notes.push({ text: '边界语气出现得更早' })
   } else if (levels.boundary === 1) {
-    notes.push({ text: '需要回应留在底稿里' })
+    notes.push({ text: '回应需求没有消失' })
   } else if (levels.stability === 1) {
-    notes.push({ text: '不确定感没有上封面' })
+    notes.push({ text: '不确定感被压低了一点' })
   } else {
-    notes.push({ text: '稳定叙述先被导出' })
+    notes.push({ text: '稳定叙述更容易留下' })
   }
 
   return notes
@@ -231,7 +198,7 @@ export function computeResult(answers: Record<string, number>): ResultSnapshot {
     axisScores,
     axisLevels,
     publicType,
-    draftCard: buildDraftCard(publicType, axisLevels, mirrorBias),
+    draftResidue: buildDraftResidue(publicType, axisLevels, mirrorBias),
     traceNotes: buildTraceNotes(axisLevels, mirrorBias),
     brandRevealState: 'tmti',
     defaultExportMode: DEFAULT_EXPORT_MODE,

@@ -9,6 +9,7 @@ export type MotifId = 'frame' | 'orbit' | 'column' | 'ripple' | 'veil' | 'band' 
 export type ThemeToken = 'ember' | 'ink' | 'moss' | 'berry' | 'slate' | 'dusk' | 'linen' | 'glass'
 
 export type BrandRevealState = 'tmti' | 'draft-peek' | 'meta-visible'
+export type BrandRevealEvent = 'peek-draft' | 'select-trace-export'
 
 export type ExportMode = 'cover' | 'cover-with-trace'
 
@@ -38,15 +39,9 @@ export interface PublicTypeProfile {
   withheldDescriptors: string[]
 }
 
-export interface DraftFragment {
-  label: '更快接受' | '多次回避' | '未进入封面' | '保留描述'
-  text: string
-}
-
-export interface DraftCard {
-  title: string
-  fragments: DraftFragment[]
-  note: string
+export interface DraftResidue {
+  lines: string[]
+  marginNote?: string
 }
 
 export interface TraceNote {
@@ -57,7 +52,7 @@ export interface ResultSnapshot {
   axisScores: Record<AxisId, number>
   axisLevels: Record<AxisId, 1 | 2 | 3>
   publicType: PublicTypeProfile
-  draftCard: DraftCard
+  draftResidue: DraftResidue
   traceNotes: TraceNote[]
   brandRevealState: BrandRevealState
   defaultExportMode: ExportMode

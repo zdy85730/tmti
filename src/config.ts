@@ -4,6 +4,4 @@ export const appConfig = {
   siteUrl: 'https://zdy85730.github.io/tmti/',
 }
 
-export const introSignals = ['已记录：表层倾向', '已记录：稳定叙述', '已记录：展示偏好', '已记录：暴露成本']
-
-export const gateStages = ['正在整理可公开版本', '已保留完整侧写', '正在压缩展示卡', '准备导出默认页面']
+export const gateStages = ['正在生成结果页', '正在整理页面', '正在排版', '即将完成']

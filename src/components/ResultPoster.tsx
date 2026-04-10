@@ -33,7 +33,6 @@ export function ResultPoster({ profile, compact = false }: ResultPosterProps) {
       <div className="poster-content">
         <div className="poster-kicker-row">
           <span className="poster-kicker">TMTI</span>
-          <span className="poster-kicker poster-kicker-ghost">PUBLIC CARD</span>
         </div>
         <div className="poster-main-copy">
           <p className="poster-code">{profile.code}</p>

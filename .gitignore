@@ -15,6 +15,7 @@ generated
 *.local
 __pycache__/
 coverage
+test-results
 
 # Editor directories and files
 .vscode/*
