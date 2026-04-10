@@ -1,0 +1,108 @@
+import type { QuestionTemplate, ThemeSeed } from '../types'
+
+export const themeSeeds: ThemeSeed[] = [
+  {
+    id: 'seed-boundary',
+    name: '边界与分寸',
+    family: 'boundary',
+    emotionTags: ['靠近', '退让', '分寸', '拒绝'],
+    sceneTags: ['熟人', '职场', '亲密关系'],
+    misunderstandingTags: ['冷', '难靠近', '太直接'],
+    sourceKinds: ['social', 'forum', 'editorial'],
+  },
+  {
+    id: 'seed-response',
+    name: '回应与热度',
+    family: 'response',
+    emotionTags: ['热络', '留白', '节奏', '回消息'],
+    sceneTags: ['聊天', '熟人', '暧昧'],
+    misunderstandingTags: ['不在意', '太黏', '忽冷忽热'],
+    sourceKinds: ['social', 'forum', 'editorial'],
+  },
+  {
+    id: 'seed-stability',
+    name: '稳定与切换',
+    family: 'stability',
+    emotionTags: ['主线', '切换', '状态', '稳定'],
+    sceneTags: ['不同圈子', '工作场合', '社交切换'],
+    misunderstandingTags: ['变得太快', '不好定义', '过于稳定'],
+    sourceKinds: ['social', 'forum', 'editorial'],
+  },
+  {
+    id: 'seed-exposure',
+    name: '误读与暴露',
+    family: 'exposure',
+    emotionTags: ['误解', '解释', '暴露', '收回去'],
+    sceneTags: ['公开场面', '关系降温', '被点评'],
+    misunderstandingTags: ['不在乎', '太敏感', '想太多'],
+    sourceKinds: ['social', 'forum', 'editorial'],
+  },
+]
+
+export const questionTemplates: QuestionTemplate[] = [
+  {
+    id: 'tmpl-scene-choose',
+    family: 'boundary',
+    role: 'theme',
+    promptPattern: '给一个具体场景，让答题者在三种反应里选一个。',
+    optionPattern: '收住 / 协调 / 直接立边界',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-distance-meter',
+    family: 'response',
+    role: 'theme',
+    promptPattern: '围绕回复速度、靠近程度、热络维持方式提出问题。',
+    optionPattern: '先跟上 / 看状态 / 保持留白',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-self-line',
+    family: 'stability',
+    role: 'theme',
+    promptPattern: '围绕不同场景中的一致性、主线感和自我定义提出问题。',
+    optionPattern: '跟着场面走 / 调整但保留主线 / 核心稳定',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-exposure-window',
+    family: 'exposure',
+    role: 'theme',
+    promptPattern: '围绕被误读、解释冲动和公开暴露成本提出问题。',
+    optionPattern: '直接说明 / 暂时观望 / 不让它上台面',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-mirror-reask',
+    family: 'boundary',
+    role: 'mirror',
+    promptPattern: '隔一段后换个语境，重问同一结构。',
+    optionPattern: '保持方向一致，但文面更换。',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-calibration-private',
+    family: 'response',
+    role: 'calibration',
+    promptPattern: '用更私下、更难装饰的问法做校准。',
+    optionPattern: '三档暴露成本递增。',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-judgment-contrast',
+    family: 'stability',
+    role: 'theme',
+    promptPattern: '直接比较两句自我描述，让答题者选更像自己的说法。',
+    optionPattern: '更依赖反馈 / 有余地 / 主线清楚',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+  {
+    id: 'tmpl-reading-friction',
+    family: 'exposure',
+    role: 'calibration',
+    promptPattern: '从“被别人读到什么”切入，测试答题者对误读的耐受度。',
+    optionPattern: '能接受 / 勉强接受 / 最想删掉',
+    toneSupport: ['soft', 'clean', 'sharp', 'observant'],
+  },
+]
+

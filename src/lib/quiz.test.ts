@@ -1,51 +1,49 @@
 import { describe, expect, it } from 'vitest'
-import { questions } from '../data/questions'
-import { publicTypeProfiles } from '../data/publicTypes'
-import { computeResult } from './quiz'
+import { buildGeneratedQuiz, buildGeneratorProfile, computeGeneratedQuizResult, decodeQuizToken, encodeQuizToken, validateContentModel } from './quiz'
 
-function answersFromTarget(target: { public: 1 | 2 | 3; exposure: 1 | 2 | 3; boundary: 1 | 2 | 3; stability: 1 | 2 | 3 }) {
-  return Object.fromEntries(questions.map((question) => [question.id, target[question.axis]]))
+const builderAnswers = {
+  family: 'response',
+  scene: 'relationship',
+  tone: 'clean',
+  titleStyle: 'plain',
+  rhythm: 'scene',
+  themeToken: 'berry',
 }
 
-describe('computeResult', () => {
-  it('keeps a candidate pool and still picks the expected cover type for a clean target', () => {
-    const steady = publicTypeProfiles.find((profile) => profile.code === 'STEADY')
+describe('TMTI quiz generation', () => {
+  it('builds the same quiz for the same generator answers', () => {
+    const profileA = buildGeneratorProfile(builderAnswers)
+    const profileB = buildGeneratorProfile(builderAnswers)
+    const quizA = buildGeneratedQuiz(profileA)
+    const quizB = buildGeneratedQuiz(profileB)
 
-    expect(steady).toBeDefined()
-
-    const snapshot = computeResult(answersFromTarget(steady!.target))
-
-    expect(snapshot.selectedCover.code).toBe('STEADY')
-    expect(snapshot.candidatePool.length).toBe(3)
-    expect(snapshot.candidatePool[0]?.code).toBe('STEADY')
-    expect(snapshot.coverWords.length).toBeGreaterThanOrEqual(3)
-    expect(snapshot.defaultExportMode).toBe('cover')
+    expect(quizA.id).toBe(quizB.id)
+    expect(quizA.questionIds).toEqual(quizB.questionIds)
+    expect(quizA.title).toBe(quizB.title)
+    expect(quizA.questions).toHaveLength(10)
   })
 
-  it('surfaces conflicts, cut words, and residue from mirror plus exposure answers', () => {
-    const answers = answersFromTarget({
-      public: 2,
-      exposure: 3,
-      boundary: 2,
-      stability: 2,
-    })
+  it('round-trips quiz tokens into the same definition', () => {
+    const quiz = buildGeneratedQuiz(buildGeneratorProfile(builderAnswers))
+    const restored = decodeQuizToken(encodeQuizToken(quiz))
 
-    answers.q1 = 1
-    answers.q2 = 1
-    answers.q3 = 1
-    answers.q4 = 2
-    answers.q13 = 3
-    answers.q14 = 3
-    answers.q15 = 3
-    answers.q16 = 3
+    expect(restored).not.toBeNull()
+    expect(restored?.id).toBe(quiz.id)
+    expect(restored?.questionIds).toEqual(quiz.questionIds)
+    expect(restored?.title).toBe(quiz.title)
+  })
 
-    const snapshot = computeResult(answers)
+  it('computes a valid second-order result for a full answer set', () => {
+    const quiz = buildGeneratedQuiz(buildGeneratorProfile(builderAnswers))
+    const answers = Object.fromEntries(quiz.questions.map((question) => [question.id, question.options[0]?.id ?? 'a']))
+    const result = computeGeneratedQuizResult(answers, quiz)
 
-    expect(snapshot.conflictEvidence.length).toBeGreaterThan(0)
-    expect(snapshot.conflictEvidence.some((entry) => entry.before.includes('留白'))).toBe(true)
-    expect(snapshot.cutWords.some((word) => word.includes('需要被确认') || word.includes('想确认关系'))).toBe(true)
-    expect(snapshot.residueMarks.length).toBeGreaterThanOrEqual(4)
-    expect(snapshot.residueMarks.some((mark) => mark.tone === 'cut' && mark.strike)).toBe(true)
-    expect(snapshot.traceNotes.some((note) => note.text.includes('->'))).toBe(true)
+    expect(result.outcome.title.length).toBeGreaterThan(0)
+    expect(Object.keys(result.axisScores)).toHaveLength(2)
+    expect(Object.values(result.axisPercentages).every((score) => score >= 0 && score <= 100)).toBe(true)
+  })
+
+  it('keeps the bundled content model internally consistent', () => {
+    expect(validateContentModel()).toEqual([])
   })
 })

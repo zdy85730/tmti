@@ -1,96 +1,13 @@
-export type Screen = 'intro' | 'quiz' | 'gate' | 'result'
-
-export type AxisId = 'public' | 'exposure' | 'boundary' | 'stability'
-export type QuizValue = 1 | 2 | 3
-
-export type SignalTag = 'regular' | 'mirror' | 'preference' | 'exposure'
-
-export type MotifId = 'frame' | 'orbit' | 'column' | 'ripple' | 'veil' | 'band' | 'grid' | 'arc'
+export type Screen = 'intro' | 'builder' | 'preview' | 'play' | 'result' | 'about'
 
 export type ThemeToken = 'ember' | 'ink' | 'moss' | 'berry' | 'slate' | 'dusk' | 'linen' | 'glass'
-
-export type BrandRevealState = 'tmti' | 'draft-peek' | 'meta-visible'
-export type BrandRevealEvent = 'peek-draft' | 'inspect-preview' | 'attempt-share' | 'select-trace-export'
-
-export type ExportMode = 'cover' | 'cover-with-trace'
-
-export interface QuizOption {
-  label: string
-  value: QuizValue
-}
-
-export interface QuizQuestion {
-  id: string
-  axis: AxisId
-  prompt: string
-  options: QuizOption[]
-  mirrorOf?: string
-  signalTags: SignalTag[]
-}
-
-export interface PublicTypeProfile {
-  code: string
-  name: string
-  shortDefinition: string
-  subtitle: string
-  motif: MotifId
-  themeToken: ThemeToken
-  target: Record<AxisId, 1 | 2 | 3>
-  acceptedDescriptors: string[]
-  withheldDescriptors: string[]
-}
-
-export interface QuestionOutcomeConfig {
-  coverTokens?: Record<QuizValue, string[]>
-  cutTokens?: Record<QuizValue, string[]>
-  candidateHints?: Record<QuizValue, string[]>
-  priorityWeights?: Record<QuizValue, number>
-  conflictCue?: string
-}
-
-export interface ResultCandidate {
-  code: string
-  name: string
-  score: number
-  reasonWords: string[]
-}
-
-export interface ConflictEvidence {
-  cue: string
-  before: string
-  after: string
-  severity: 'soft' | 'hard'
-}
-
-export interface ResidueMark {
-  text: string
-  tone: 'cut' | 'conflict' | 'alternate'
-  strike?: boolean
-}
-
-export interface TraceNote {
-  text: string
-}
-
-export interface ResultSnapshot {
-  axisScores: Record<AxisId, number>
-  axisLevels: Record<AxisId, QuizValue>
-  selectedCover: PublicTypeProfile
-  candidatePool: ResultCandidate[]
-  coverWords: string[]
-  cutWords: string[]
-  conflictEvidence: ConflictEvidence[]
-  residueMarks: ResidueMark[]
-  traceNotes: TraceNote[]
-  brandRevealState: BrandRevealState
-  defaultExportMode: ExportMode
-}
-
-export interface PendingResult {
-  sessionId: string
-  unlockAt: number
-  createdAt: number
-}
+export type QuizFamily = 'boundary' | 'response' | 'stability' | 'exposure'
+export type TonePack = 'soft' | 'clean' | 'sharp' | 'observant'
+export type QuestionRole = 'theme' | 'mirror' | 'calibration'
+export type SourceKind = 'social' | 'forum' | 'editorial' | 'seed'
+export type BuilderScene = 'relationship' | 'friendship' | 'work' | 'mixed'
+export type BuilderRhythm = 'scene' | 'judgment' | 'mixed'
+export type BuilderTitleStyle = 'plain' | 'essay' | 'crisp'
 
 export interface ThemePalette {
   paper: string
@@ -104,3 +21,163 @@ export interface ThemePalette {
   ghost: string
   draftPaper: string
 }
+
+export interface GeneratorOption {
+  value: string
+  label: string
+  description?: string
+}
+
+export interface GeneratorQuestion {
+  id: string
+  prompt: string
+  eyebrow: string
+  options: GeneratorOption[]
+}
+
+export type GeneratorAnswerMap = Record<string, string>
+
+export interface GeneratorProfile {
+  familyScores: Record<QuizFamily, number>
+  selectedFamily: QuizFamily
+  selectedScene: BuilderScene
+  selectedTone: TonePack
+  selectedRhythm: BuilderRhythm
+  selectedTitleStyle: BuilderTitleStyle
+  selectedThemeToken: ThemeToken
+  seed: number
+}
+
+export interface SourceTrace {
+  id: string
+  kind: SourceKind
+  platform: string
+  label: string
+  url: string | null
+  publishedAt: string
+  summary: string
+  tags: string[]
+}
+
+export interface QuestionTemplate {
+  id: string
+  family: QuizFamily
+  role: QuestionRole
+  promptPattern: string
+  optionPattern: string
+  toneSupport: TonePack[]
+}
+
+export interface ThemeSeed {
+  id: string
+  name: string
+  family: QuizFamily
+  emotionTags: string[]
+  sceneTags: string[]
+  misunderstandingTags: string[]
+  sourceKinds: SourceKind[]
+}
+
+export interface GeneratedQuizOption {
+  id: string
+  label: string
+  scores: Record<string, 0 | 1 | 2>
+}
+
+export interface ThemePackQuestion {
+  id: string
+  templateId: string
+  role: QuestionRole
+  tone: TonePack
+  prompt: string
+  options: GeneratedQuizOption[]
+  axisFocus: [string, string]
+  sourceTraceIds: string[]
+}
+
+export interface ThemePack {
+  id: string
+  family: QuizFamily
+  seedId: string
+  scene: BuilderScene
+  rhythm: BuilderRhythm
+  tonePacks: TonePack[]
+  themeToken: ThemeToken
+  tags: string[]
+  questionIds: string[]
+  outcomePackId: string
+  titleVariants: Record<TonePack, Record<BuilderTitleStyle, string>>
+  introVariants: Record<TonePack, string>
+}
+
+export interface OutcomeAxis {
+  id: string
+  label: string
+  lowLabel: string
+  highLabel: string
+}
+
+export interface GeneratedQuizOutcome {
+  id: string
+  key: [lowHigh: 'low' | 'high', lowHigh: 'low' | 'high']
+  title: string
+  summary: string
+  bullets: string[]
+}
+
+export interface OutcomePack {
+  id: string
+  family: QuizFamily
+  axes: [OutcomeAxis, OutcomeAxis]
+  outcomes: GeneratedQuizOutcome[]
+}
+
+export interface GeneratedQuizDefinition {
+  id: string
+  brandName: string
+  title: string
+  intro: string
+  family: QuizFamily
+  themePackId: string
+  tonePack: TonePack
+  themeToken: ThemeToken
+  seed: number
+  questionIds: string[]
+  questions: ThemePackQuestion[]
+  outcomePackId: string
+  metaTiLink: string
+}
+
+export interface GeneratedQuizResult {
+  outcome: GeneratedQuizOutcome
+  axisScores: Record<string, number>
+  axisPercentages: Record<string, number>
+  axisLevels: Record<string, 'low' | 'high'>
+}
+
+export interface QuizTokenPayload {
+  version: 1
+  quizId: string
+  family: QuizFamily
+  themePackId: string
+  tonePack: TonePack
+  themeToken: ThemeToken
+  seed: number
+  questionIds: string[]
+  outcomePackId: string
+  title: string
+  intro: string
+}
+
+export interface StoredQuizSession {
+  definition: GeneratedQuizDefinition
+  builderAnswers: GeneratorAnswerMap
+  createdAt: number
+}
+
+export interface ThemePackDraft {
+  themePack: ThemePack
+  questions: ThemePackQuestion[]
+  riskNote: string
+}
+

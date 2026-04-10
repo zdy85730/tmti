@@ -1,280 +1,336 @@
 import type { CSSProperties } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-import { appConfig, gateStages } from './config'
-import { ResultPoster } from './components/ResultPoster'
+import { appConfig } from './config'
+import { generatorQuestions } from './data/generatorQuestions'
+import { manifest } from './data/manifest'
 import { themePalettes } from './data/themeTokens'
 import { track } from './lib/analytics'
-import { buildQuestionDeck, computeResult } from './lib/quiz'
-import { DEFAULT_EXPORT_MODE, transitionBrandRevealState } from './lib/reveal'
-import { downloadShareCard } from './lib/share'
 import {
-  clearPendingResult,
-  clearResultSession,
-  loadResultSession,
-  saveResultSession,
-  updateStoredSnapshot,
-} from './lib/storage'
-import type { BrandRevealEvent, ExportMode, PendingResult, QuizQuestion, ResultSnapshot, Screen } from './types'
+  buildGeneratedQuiz,
+  buildGeneratorProfile,
+  computeGeneratedQuizResult,
+  decodeQuizToken,
+  encodeQuizToken,
+  getOutcomePackById,
+} from './lib/quiz'
+import { copyQuizLink, shareQuizLink } from './lib/share'
+import { clearGeneratedQuizSession, loadGeneratedQuizSession, saveGeneratedQuizSession } from './lib/storage'
+import type {
+  GeneratedQuizDefinition,
+  GeneratedQuizResult,
+  GeneratorAnswerMap,
+  GeneratorQuestion,
+  Screen,
+} from './types'
 
-function formatCountdown(timeLeftMs: number) {
-  const totalSeconds = Math.max(0, Math.ceil(timeLeftMs / 1000))
-  const seconds = totalSeconds % 60
-  return `00:${String(seconds).padStart(2, '0')}`
-}
+function readInitialScreen() {
+  const url = new URL(window.location.href)
 
-function createPendingResult(): PendingResult {
-  const createdAt = Date.now()
+  if (url.searchParams.get('about') === 'metati') {
+    return {
+      screen: 'about' as Screen,
+      definition: null,
+    }
+  }
+
+  const token = url.searchParams.get(appConfig.shareParam)
+  if (token) {
+    const decoded = decodeQuizToken(token)
+
+    if (decoded) {
+      return {
+        screen: 'play' as Screen,
+        definition: decoded,
+      }
+    }
+  }
 
   return {
-    sessionId: window.crypto?.randomUUID?.() ?? `tmti-${createdAt}`,
-    unlockAt: createdAt + appConfig.generationWaitSeconds * 1000,
-    createdAt,
+    screen: 'intro' as Screen,
+    definition: null,
   }
+}
+
+function getProgress(questionList: GeneratorQuestion[], answers: GeneratorAnswerMap) {
+  const answered = questionList.filter((question) => answers[question.id]).length
+  return {
+    answered,
+    total: questionList.length,
+    percentage: questionList.length ? Math.round((answered / questionList.length) * 100) : 0,
+  }
+}
+
+function getQuizProgress(questionList: GeneratedQuizDefinition['questions'], answers: Record<string, string>) {
+  const answered = questionList.filter((question) => answers[question.id]).length
+  return {
+    answered,
+    total: questionList.length,
+    percentage: questionList.length ? Math.round((answered / questionList.length) * 100) : 0,
+    complete: questionList.length > 0 && answered === questionList.length,
+  }
+}
+
+function syncUrl(definition: GeneratedQuizDefinition | null, about = false) {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('about')
+  url.searchParams.delete(appConfig.shareParam)
+
+  if (about) {
+    url.searchParams.set('about', 'metati')
+  } else if (definition) {
+    url.searchParams.set(appConfig.shareParam, encodeQuizToken(definition))
+  }
+
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
 }
 
 function App() {
-  const [screen, setScreen] = useState<Screen>('intro')
-  const [booted, setBooted] = useState(false)
-  const [questionDeck, setQuestionDeck] = useState<QuizQuestion[]>([])
-  const [answers, setAnswers] = useState<Record<string, number>>({})
-  const [pendingResult, setPendingResult] = useState<PendingResult | null>(null)
-  const [resultSnapshot, setResultSnapshot] = useState<ResultSnapshot | null>(null)
-  const [timeLeftMs, setTimeLeftMs] = useState(0)
-  const [exportMode, setExportMode] = useState<ExportMode>(DEFAULT_EXPORT_MODE)
-  const [downloadBusy, setDownloadBusy] = useState(false)
-  const [exportMessage, setExportMessage] = useState('')
-
-  const answeredCount = questionDeck.filter((question) => answers[question.id] !== undefined).length
-  const quizComplete = questionDeck.length > 0 && answeredCount === questionDeck.length
-  const quizProgress = questionDeck.length ? Math.round((answeredCount / questionDeck.length) * 100) : 0
-
-  const gateProgress = pendingResult
-    ? Math.min(
-        100,
-        ((appConfig.generationWaitSeconds * 1000 - timeLeftMs) / (appConfig.generationWaitSeconds * 1000)) * 100,
-      )
-    : 0
-
-  const gateStage = gateStages[Math.min(gateStages.length - 1, Math.floor((gateProgress / 100) * gateStages.length))]
-  const activePalette = themePalettes[resultSnapshot?.selectedCover.themeToken ?? 'ember']
-  const revealState = resultSnapshot?.brandRevealState ?? 'tmti'
-  const revealMetaVisible = revealState === 'meta-visible'
-  const revealDraftVisible = revealState === 'draft-peek' || revealState === 'meta-visible'
-  const exportPreviewShowsTrace = exportMode === 'cover-with-trace'
-  const residueLabel = resultSnapshot?.cutWords.length ? '裁切' : '边角'
+  const initialState = useMemo(() => readInitialScreen(), [])
+  const [screen, setScreen] = useState<Screen>(initialState.screen)
+  const [builderAnswers, setBuilderAnswers] = useState<GeneratorAnswerMap>({})
+  const [generatedQuiz, setGeneratedQuiz] = useState<GeneratedQuizDefinition | null>(initialState.definition ?? null)
+  const [playAnswers, setPlayAnswers] = useState<Record<string, string>>({})
+  const [result, setResult] = useState<GeneratedQuizResult | null>(null)
+  const [feedback, setFeedback] = useState('')
+  const [shareBusy, setShareBusy] = useState(false)
+  const [returnScreen, setReturnScreen] = useState<Screen>('intro')
 
   useEffect(() => {
-    const { pending, snapshot } = loadResultSession()
-
-    if (snapshot && !pending) {
-      setResultSnapshot(snapshot)
-      setExportMode(snapshot.defaultExportMode)
-      setScreen('result')
-    } else if (pending && snapshot) {
-      setResultSnapshot(snapshot)
-      setExportMode(snapshot.defaultExportMode)
-
-      if (pending.unlockAt <= Date.now()) {
-        clearPendingResult()
-        setScreen('result')
-      } else {
-        setPendingResult(pending)
-        setTimeLeftMs(Math.max(0, pending.unlockAt - Date.now()))
-        setScreen('gate')
-      }
-    }
-
-    setBooted(true)
-  }, [])
-
-  useEffect(() => {
-    if (screen !== 'gate' || !pendingResult) {
+    if (initialState.definition) {
       return
     }
 
-    const syncCountdown = () => {
-      const next = Math.max(0, pendingResult.unlockAt - Date.now())
-      setTimeLeftMs(next)
-
-      if (next === 0) {
-        clearPendingResult()
-        setPendingResult(null)
-        setScreen('result')
-        track('result_revealed', { source: 'timer' })
-      }
+    const stored = loadGeneratedQuizSession()
+    if (stored?.definition) {
+      setGeneratedQuiz(stored.definition)
+      setBuilderAnswers(stored.builderAnswers)
     }
+  }, [initialState.definition])
 
-    syncCountdown()
-    const intervalId = window.setInterval(syncCountdown, 200)
+  const builderProgress = getProgress(generatorQuestions, builderAnswers)
+  const quizProgress = generatedQuiz ? getQuizProgress(generatedQuiz.questions, playAnswers) : null
+  const activePalette = themePalettes[generatedQuiz?.themeToken ?? 'linen']
+  const activeOutcomePack = generatedQuiz ? getOutcomePackById(generatedQuiz.outcomePackId) : null
 
-    return () => window.clearInterval(intervalId)
-  }, [pendingResult, screen])
-
-  function startQuiz() {
-    clearResultSession()
-    setAnswers({})
-    setQuestionDeck(buildQuestionDeck())
-    setPendingResult(null)
-    setResultSnapshot(null)
-    setTimeLeftMs(0)
-    setExportMode(DEFAULT_EXPORT_MODE)
-    setExportMessage('')
-    setScreen('quiz')
-    track('quiz_started', { questionCount: 24 })
-  }
-
-  function goHome() {
-    setScreen('intro')
-  }
-
-  function handleAnswer(questionId: string, value: number) {
-    setAnswers((currentAnswers) => ({
-      ...currentAnswers,
+  function setBuilderAnswer(questionId: string, value: string) {
+    setBuilderAnswers((current) => ({
+      ...current,
       [questionId]: value,
     }))
   }
 
-  function handleSubmit() {
-    if (!quizComplete) {
+  function startBuilder() {
+    setScreen('builder')
+    setResult(null)
+    setPlayAnswers({})
+    track('builder_started', { source: 'intro' })
+  }
+
+  function goHome() {
+    setScreen('intro')
+    setResult(null)
+    setPlayAnswers({})
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+
+  function openAbout() {
+    setReturnScreen(screen)
+    setScreen('about')
+    const url = new URL(window.location.href)
+    url.searchParams.set('about', 'metati')
+    url.searchParams.delete(appConfig.shareParam)
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`)
+  }
+
+  function closeAbout() {
+    setScreen(returnScreen === 'about' ? (generatedQuiz ? 'preview' : 'intro') : returnScreen)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('about')
+    if (generatedQuiz && returnScreen !== 'intro') {
+      url.searchParams.set(appConfig.shareParam, encodeQuizToken(generatedQuiz))
+    } else {
+      url.searchParams.delete(appConfig.shareParam)
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`)
+  }
+
+  function generateQuiz() {
+    if (builderProgress.answered !== builderProgress.total) {
       return
     }
 
-    const snapshot = computeResult(answers)
-    const pending = createPendingResult()
+    const definition = buildGeneratedQuiz(buildGeneratorProfile(builderAnswers))
+    setGeneratedQuiz(definition)
+    setResult(null)
+    setPlayAnswers({})
+    saveGeneratedQuizSession(definition, builderAnswers)
+    setScreen('preview')
+    syncUrl(definition)
 
-    saveResultSession(pending, snapshot)
-    setPendingResult(pending)
-    setResultSnapshot(snapshot)
-    setTimeLeftMs(Math.max(0, pending.unlockAt - Date.now()))
-    setExportMode(snapshot.defaultExportMode)
-    setScreen('gate')
-    track('quiz_completed', {
-      selectedCover: snapshot.selectedCover.code,
-      coverCandidate: snapshot.candidatePool[0]?.code,
-    })
+    track('quiz_generated', { themePackId: definition.themePackId, family: definition.family, tone: definition.tonePack })
   }
 
-  function applyReveal(event: BrandRevealEvent) {
-    setResultSnapshot((current) => {
-      if (!current) {
-        return current
-      }
-
-      const nextState = transitionBrandRevealState(current.brandRevealState, event)
-
-      if (nextState === current.brandRevealState) {
-        return current
-      }
-
-      const updated = {
-        ...current,
-        brandRevealState: nextState,
-      }
-      updateStoredSnapshot(updated)
-      return updated
-    })
+  function startPlay() {
+    setScreen('play')
+    setResult(null)
+    setPlayAnswers({})
+    track('quiz_play_started', { themePackId: generatedQuiz?.themePackId ?? 'none' })
   }
 
-  async function handleExport(nextMode: ExportMode) {
-    if (!resultSnapshot) {
+  function setPlayAnswer(questionId: string, optionId: string) {
+    setPlayAnswers((current) => ({
+      ...current,
+      [questionId]: optionId,
+    }))
+  }
+
+  function submitPlay() {
+    if (!generatedQuiz || !quizProgress?.complete) {
       return
     }
 
-    setExportMode(nextMode)
-    applyReveal(nextMode === 'cover-with-trace' ? 'select-trace-export' : 'attempt-share')
-    setDownloadBusy(true)
+    const computed = computeGeneratedQuizResult(playAnswers, generatedQuiz)
+    setResult(computed)
+    setScreen('result')
+    track('quiz_result_ready', { outcomeId: computed.outcome.id, themePackId: generatedQuiz.themePackId })
+  }
 
+  async function handleCopyLink() {
+    if (!generatedQuiz) {
+      return
+    }
+
+    setShareBusy(true)
     try {
-      await downloadShareCard(resultSnapshot, nextMode)
-      setExportMessage(nextMode === 'cover' ? '已导出。' : '已导出扩展版。')
-      track('result_exported', {
-        mode: nextMode,
-        selectedCover: resultSnapshot.selectedCover.code,
-      })
+      await copyQuizLink(generatedQuiz)
+      setFeedback('问卷链接已复制。')
     } finally {
-      setDownloadBusy(false)
-      window.setTimeout(() => setExportMessage(''), 2200)
+      setShareBusy(false)
+      window.setTimeout(() => setFeedback(''), 1800)
     }
   }
 
-  function handleKeepLater() {
-    setExportMode(DEFAULT_EXPORT_MODE)
-    setExportMessage('当前先留着，不导出。')
-    window.setTimeout(() => setExportMessage(''), 2000)
+  async function handleNativeShare() {
+    if (!generatedQuiz) {
+      return
+    }
+
+    setShareBusy(true)
+    try {
+      await shareQuizLink(generatedQuiz)
+      setFeedback('已打开系统分享。')
+    } finally {
+      setShareBusy(false)
+      window.setTimeout(() => setFeedback(''), 1800)
+    }
   }
 
-  function handleResultInteraction() {
-    applyReveal('peek-draft')
-  }
-
-  function handlePreviewInspect() {
-    applyReveal('inspect-preview')
-  }
-
-  if (!booted) {
-    return <main className="boot-screen">正在整理页面...</main>
+  function resetAll() {
+    clearGeneratedQuizSession()
+    setBuilderAnswers({})
+    setGeneratedQuiz(null)
+    setPlayAnswers({})
+    setResult(null)
+    setScreen('intro')
+    window.history.replaceState({}, '', window.location.pathname)
   }
 
   return (
-    <main className="app-shell">
+    <main
+      className="app-shell"
+      style={
+        {
+          ['--paper' as string]: activePalette.paper,
+          ['--paper-soft' as string]: activePalette.paperSoft,
+          ['--accent' as string]: activePalette.accent,
+          ['--accent-soft' as string]: activePalette.accentSoft,
+          ['--text-color' as string]: activePalette.text,
+          ['--subtext' as string]: activePalette.subtext,
+          ['--line-color' as string]: activePalette.line,
+          ['--ghost' as string]: activePalette.ghost,
+        } as CSSProperties
+      }
+    >
       <div className="ambient ambient-a" />
       <div className="ambient ambient-b" />
       <div className="ambient ambient-c" />
 
       {screen === 'intro' && (
         <section className="screen intro-screen">
-          <article className="hero-panel">
+          <article className="hero-card">
             <div className="hero-copy">
-              <p className="hero-brand">TMTI</p>
-              <h1>生成一张适合公开展示的性格卡片。</h1>
-              <p className="hero-lede">用一组问题，生成一张适合截图分享的结果页。</p>
-              <div className="hero-actions">
-                <button className="button button-primary" onClick={startQuiz}>
+              <p className="hero-brand">{appConfig.brandName}</p>
+              <h1>{appConfig.brandTagline}</h1>
+              <p className="hero-lede">
+                先回答几道生成器问题，系统会产出一份完整可分享的中文问卷。别人打开链接后，可以像普通测试一样一路做完并拿到结果。
+              </p>
+              <div className="button-row">
+                <button className="button button-primary" onClick={startBuilder}>
                   开始生成
+                </button>
+                <button className="button button-secondary" onClick={openAbout}>
+                  了解 META-TI
                 </button>
               </div>
             </div>
 
             <div className="hero-side">
-              <div className="mini-stack">
-                <div className="mini-draft">
-                  <span>...</span>
-                  <p>怕被误解</p>
-                  <p>想确认关系</p>
-                </div>
-                <div className="mini-cover">
-                  <span>TMTI</span>
-                  <strong>结果页</strong>
-                  <p>适合截图分享</p>
-                </div>
+              <div className="hero-sheet hero-sheet-back">
+                <span>TMTI</span>
+                <strong>{manifest.themePackCount} 份题材包</strong>
+                <p>完整问卷链接</p>
+              </div>
+              <div className="hero-sheet hero-sheet-front">
+                <span>生成物</span>
+                <strong>不是标签</strong>
+                <p>而是一份可以继续被别人完成的问卷。</p>
               </div>
             </div>
           </article>
+
+          {generatedQuiz && (
+            <article className="resume-card">
+              <div>
+                <p className="eyebrow">上次生成</p>
+                <h2>{generatedQuiz.title}</h2>
+                <p>{generatedQuiz.intro}</p>
+              </div>
+              <div className="button-row compact-row">
+                <button className="button button-secondary" onClick={() => setScreen('preview')}>
+                  继续查看
+                </button>
+                <button className="button button-tertiary" onClick={resetAll}>
+                  清空重来
+                </button>
+              </div>
+            </article>
+          )}
         </section>
       )}
 
-      {screen === 'quiz' && (
-        <section className="screen quiz-screen">
+      {screen === 'builder' && (
+        <section className="screen builder-screen">
           <article className="topbar-card">
             <div>
-              <p className="eyebrow">问答流程</p>
+              <p className="eyebrow">生成器</p>
               <h2>
-                {answeredCount} / {questionDeck.length}
+                {builderProgress.answered} / {builderProgress.total}
               </h2>
             </div>
             <div className="topbar-side">
               <div className="progress-bar">
-                <span style={{ width: `${quizProgress}%` }} />
+                <span style={{ width: `${builderProgress.percentage}%` }} />
               </div>
+              <p className="topbar-note">这些问题只决定问卷怎么长出来，不会反过来评价你。</p>
             </div>
           </article>
 
           <div className="question-list">
-            {questionDeck.map((question, index) => (
+            {generatorQuestions.map((question) => (
               <article key={question.id} className="question-card">
                 <div className="question-head">
-                  <span className="question-index">Q{index + 1}</span>
+                  <span className="question-tag">{question.eyebrow}</span>
                 </div>
                 <h3>{question.prompt}</h3>
                 <div className="option-list">
@@ -284,10 +340,13 @@ function App() {
                         type="radio"
                         name={question.id}
                         value={option.value}
-                        checked={answers[question.id] === option.value}
-                        onChange={() => handleAnswer(question.id, option.value)}
+                        checked={builderAnswers[question.id] === option.value}
+                        onChange={() => setBuilderAnswer(question.id, option.value)}
                       />
-                      <span>{option.label}</span>
+                      <span className="option-copy">
+                        <strong>{option.label}</strong>
+                        {option.description && <small>{option.description}</small>}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -296,166 +355,242 @@ function App() {
           </div>
 
           <div className="footer-actions">
-            <p className="footer-hint">按第一反应选择。</p>
-            <div className="button-row">
-              <button className="button button-secondary" onClick={goHome}>
-                返回首页
-              </button>
-              <button className="button button-primary" disabled={!quizComplete} onClick={handleSubmit}>
-                提交并生成
-              </button>
-            </div>
+            <button className="button button-secondary" onClick={goHome}>
+              返回首页
+            </button>
+            <button
+              className="button button-primary"
+              disabled={builderProgress.answered !== builderProgress.total}
+              onClick={generateQuiz}
+            >
+              生成问卷
+            </button>
           </div>
         </section>
       )}
 
-      {screen === 'gate' && pendingResult && resultSnapshot && (
-        <section className="screen gate-screen">
-          <article className="gate-card">
-            <div className="gate-copy">
-              <p className="hero-brand">TMTI</p>
-              <h2>正在生成结果页。</h2>
-              <div className="countdown-display">{formatCountdown(timeLeftMs)}</div>
-              <div className="progress-bar large">
-                <span style={{ width: `${gateProgress}%` }} />
+      {screen === 'preview' && generatedQuiz && (
+        <section className="screen preview-screen">
+          <article className="hero-card preview-hero">
+            <div className="hero-copy">
+              <p className="hero-brand">{appConfig.brandName}</p>
+              <h1>{generatedQuiz.title}</h1>
+              <p className="hero-lede">{generatedQuiz.intro}</p>
+              <div className="chip-row">
+                <span className="chip">{generatedQuiz.questions.length} 道题</span>
+                <span className="chip">{generatedQuiz.family}</span>
+                <span className="chip">{generatedQuiz.tonePack}</span>
               </div>
-              <p className="gate-stage">{gateStage}</p>
+              <div className="button-row">
+                <button className="button button-primary" disabled={shareBusy} onClick={handleCopyLink}>
+                  复制问卷链接
+                </button>
+                <button className="button button-secondary" disabled={shareBusy} onClick={handleNativeShare}>
+                  系统分享
+                </button>
+                <button className="button button-tertiary" onClick={startPlay}>
+                  我先做一遍
+                </button>
+              </div>
+              {feedback && <p className="feedback-message">{feedback}</p>}
             </div>
-            <div className="gate-preview">
-              <ResultPoster profile={resultSnapshot.selectedCover} chips={resultSnapshot.coverWords} compact />
+
+            <div className="preview-sheet">
+              <p className="eyebrow">问卷预览</p>
+              <ul className="sample-list">
+                {generatedQuiz.questions.slice(0, 3).map((question) => (
+                  <li key={question.id}>{question.prompt}</li>
+                ))}
+              </ul>
             </div>
           </article>
+
+          <div className="section-grid">
+            <article className="info-card">
+              <p className="eyebrow">题目样例</p>
+              <div className="sample-cards">
+                {generatedQuiz.questions.slice(0, 4).map((question) => (
+                  <article key={question.id} className="sample-card">
+                    <strong>{question.prompt}</strong>
+                    <p>{question.options.map((option) => option.label).join(' / ')}</p>
+                  </article>
+                ))}
+              </div>
+            </article>
+
+            <article className="meta-card">
+              <p className="eyebrow">项目入口</p>
+              <h2>META-TI</h2>
+              <p>结果之外，这个项目关注的其实是问卷本身如何被做出来、被带走、再继续定义别人。</p>
+              <button className="button button-secondary" onClick={openAbout}>
+                {appConfig.metaTiLinkLabel}
+              </button>
+            </article>
+          </div>
         </section>
       )}
 
-      {screen === 'result' && resultSnapshot && (
-        <section
-          className="screen result-screen"
-          onPointerEnter={handleResultInteraction}
-          onWheel={handleResultInteraction}
-          onTouchMove={handleResultInteraction}
-        >
-          <article
-            className="candidate-stage-card"
-            style={{ ['--accent-soft' as string]: activePalette.accentSoft } as CSSProperties}
-            onPointerDown={handleResultInteraction}
-          >
-            <div className="candidate-stage-grid">
-              <div className="selected-cover-sheet">
-                <div className="cover-topbar">
-                  <p className="hero-brand">TMTI</p>
-                  <span className="selection-state">定稿</span>
-                </div>
-                <p className="eyebrow">结果</p>
-                <h2>{resultSnapshot.selectedCover.name}</h2>
-                <p className="cover-definition">{resultSnapshot.selectedCover.shortDefinition}</p>
-                <p className="cover-subtitle">{resultSnapshot.selectedCover.subtitle}</p>
-                <div className="descriptor-row">
-                  {resultSnapshot.coverWords.map((descriptor) => (
-                    <span key={descriptor} className="descriptor-chip">
-                      {descriptor}
-                    </span>
-                  ))}
-                </div>
+      {screen === 'play' && generatedQuiz && (
+        <section className="screen play-screen">
+          <article className="topbar-card">
+            <div>
+              <p className="eyebrow">{appConfig.brandName}</p>
+              <h2>{generatedQuiz.title}</h2>
+            </div>
+            <div className="topbar-side">
+              <div className="progress-bar">
+                <span style={{ width: `${quizProgress?.percentage ?? 0}%` }} />
               </div>
-
-              <aside className={`candidate-pool ${revealDraftVisible ? 'active' : ''}`}>
-                {resultSnapshot.candidatePool.map((candidate, index) => (
-                  <article key={candidate.code} className={`candidate-card ${index === 0 ? 'selected' : 'ghost'}`}>
-                    <small>{index === 0 ? '当前' : '备选'}</small>
-                    <strong>{candidate.name}</strong>
-                    <div className="candidate-reason-row">
-                      {candidate.reasonWords.map((word) => (
-                        <span key={`${candidate.code}-${word}`}>{word}</span>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </aside>
+              <p className="topbar-note">{generatedQuiz.intro}</p>
             </div>
           </article>
 
-          <section className={`residue-section ${revealDraftVisible ? 'active' : ''}`}>
-            <div className="residue-header">
-              <p className="eyebrow">边角</p>
-              {revealMetaVisible && <small className="export-meta-tag">META-TI</small>}
-            </div>
+          <div className="question-list">
+            {generatedQuiz.questions.map((question, index) => (
+              <article key={question.id} className="question-card">
+                <div className="question-head">
+                  <span className="question-tag">Q{index + 1}</span>
+                  <small>{question.role}</small>
+                </div>
+                <h3>{question.prompt}</h3>
+                <div className="option-list">
+                  {question.options.map((option) => (
+                    <label key={`${question.id}-${option.id}`} className="option-card">
+                      <input
+                        type="radio"
+                        name={question.id}
+                        value={option.id}
+                        checked={playAnswers[question.id] === option.id}
+                        onChange={() => setPlayAnswer(question.id, option.id)}
+                      />
+                      <span className="option-copy">
+                        <strong>{option.label}</strong>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
 
-            <div className="residue-layout">
-              <div className="residue-mark-wall">
-                {resultSnapshot.residueMarks.map((mark) => (
-                  <span
-                    key={`${mark.tone}-${mark.text}`}
-                    className={`residue-mark tone-${mark.tone} ${mark.strike ? 'strike' : ''}`}
-                  >
-                    {mark.text}
+          <footer className="play-footer">
+            <div>
+              <a
+                className="meta-link"
+                href={generatedQuiz.metaTiLink}
+                onClick={(event) => {
+                  event.preventDefault()
+                  openAbout()
+                }}
+              >
+                由 META-TI 生成
+              </a>
+            </div>
+            <div className="button-row compact-row">
+              <button className="button button-secondary" onClick={() => setScreen('preview')}>
+                返回预览
+              </button>
+              <button className="button button-primary" disabled={!quizProgress?.complete} onClick={submitPlay}>
+                查看结果
+              </button>
+            </div>
+          </footer>
+        </section>
+      )}
+
+      {screen === 'result' && generatedQuiz && result && activeOutcomePack && (
+        <section className="screen result-screen">
+          <article className="hero-card result-hero">
+            <div className="hero-copy">
+              <p className="hero-brand">{appConfig.brandName}</p>
+              <h1>{result.outcome.title}</h1>
+              <p className="hero-lede">{result.outcome.summary}</p>
+              <div className="bullet-list">
+                {result.outcome.bullets.map((bullet) => (
+                  <span key={bullet} className="bullet-item">
+                    {bullet}
                   </span>
                 ))}
               </div>
-
-              <div className="trace-grid">
-                {resultSnapshot.traceNotes.map((note) => (
-                  <article key={note.text} className="trace-card">
-                    <p>{note.text}</p>
-                  </article>
-                ))}
-              </div>
             </div>
-          </section>
-
-          <article className="export-card" onPointerEnter={handlePreviewInspect}>
-            <div className="export-header">
-              <p className="eyebrow">预览</p>
-              <small className="preview-status">{exportPreviewShowsTrace ? '带上边角' : '只带成品'}</small>
-              {revealMetaVisible && <small className="export-meta-tag">META-TI</small>}
+            <div className="result-panel">
+              {activeOutcomePack.axes.map((axis) => (
+                <article key={axis.id} className="axis-card">
+                  <div className="axis-head">
+                    <strong>{axis.label}</strong>
+                    <span>{result.axisLevels[axis.id] === 'high' ? axis.highLabel : axis.lowLabel}</span>
+                  </div>
+                  <div className="progress-bar axis-bar">
+                    <span style={{ width: `${result.axisPercentages[axis.id]}%` }} />
+                  </div>
+                  <small>{result.axisPercentages[axis.id]}%</small>
+                </article>
+              ))}
             </div>
+          </article>
 
-            <div className={`export-preview ${revealDraftVisible ? 'peeked' : ''} ${exportPreviewShowsTrace ? 'with-trace' : ''}`}>
-              <div className="export-preview-draft">
-                <span>{revealMetaVisible ? 'META-TI' : residueLabel}</span>
-                <div className="export-preview-draft-marks">
-                  {resultSnapshot.residueMarks.slice(0, 5).map((mark) => (
-                    <p key={`${mark.tone}-${mark.text}`} className={`${mark.strike ? 'strike' : ''} tone-${mark.tone}`}>
-                      {mark.text}
-                    </p>
-                  ))}
-                </div>
-              </div>
-
-              <div className="export-preview-cover">
-                <ResultPoster profile={resultSnapshot.selectedCover} chips={resultSnapshot.coverWords} compact />
-              </div>
-            </div>
-
-            <div className="button-row export-row">
-              <button className="button button-primary" disabled={downloadBusy} onClick={() => handleExport('cover')}>
-                {downloadBusy && exportMode === 'cover' ? '导出中...' : '发这一版'}
+          <article className="meta-card result-meta-card">
+            <p className="eyebrow">问卷来源</p>
+            <h2>{generatedQuiz.title}</h2>
+            <p>这份结果来自一份由 TMTI 生成的完整问卷。想看这个项目本身，可以从下面的入口回到 META-TI。</p>
+            <div className="button-row compact-row">
+              <button className="button button-secondary" onClick={handleCopyLink}>
+                再复制一次问卷链接
               </button>
-              <button
-                className="button button-secondary"
-                disabled={downloadBusy}
-                onClick={() => handleExport('cover-with-trace')}
-              >
-                {downloadBusy && exportMode === 'cover-with-trace' ? '导出中...' : '连同留痕一起导出'}
-              </button>
-              <button className="button button-tertiary" disabled={downloadBusy} onClick={handleKeepLater}>
-                先留着
+              <button className="button button-tertiary" onClick={openAbout}>
+                {appConfig.metaTiLinkLabel}
               </button>
             </div>
-
-            {exportMessage && <p className="export-message">{exportMessage}</p>}
+            {feedback && <p className="feedback-message">{feedback}</p>}
           </article>
 
           <div className="footer-actions">
-            <div className="button-row">
-              <button className="button button-secondary" onClick={goHome}>
-                返回首页
-              </button>
-              <button className="button button-primary" onClick={startQuiz}>
-                再做一次
-              </button>
-            </div>
+            <button className="button button-secondary" onClick={startPlay}>
+              重新作答
+            </button>
+            <button className="button button-primary" onClick={goHome}>
+              返回首页
+            </button>
           </div>
+        </section>
+      )}
+
+      {screen === 'about' && (
+        <section className="screen about-screen">
+          <article className="hero-card">
+            <div className="hero-copy">
+              <p className="hero-brand">META-TI</p>
+              <h1>从结果转向提问方式。</h1>
+              <p className="hero-lede">
+                在这个版本里，主产物不再是一张人格结果卡，而是一份完整的中文问卷。它可以被继续分享、继续作答，也会把项目的关注点从“你是什么”转向“问卷本身是怎样被做出来的”。
+              </p>
+              <div className="button-row">
+                <a className="button button-secondary" href={appConfig.repoUrl} target="_blank" rel="noreferrer">
+                  查看仓库
+                </a>
+                <button className="button button-primary" onClick={closeAbout}>
+                  返回
+                </button>
+              </div>
+            </div>
+
+            <div className="about-grid">
+              <article className="sample-card">
+                <strong>一阶用户</strong>
+                <p>负责生成问卷，不会被系统反过来评价。</p>
+              </article>
+              <article className="sample-card">
+                <strong>二阶用户</strong>
+                <p>打开链接后像普通测试一样一路做完并拿到结果。</p>
+              </article>
+              <article className="sample-card">
+                <strong>母体库</strong>
+                <p>
+                  当前内置 {manifest.themePackCount} 个题材包、{manifest.questionTemplateCount} 个题目母版、{manifest.sourceTraceCount} 条来源追踪。
+                </p>
+              </article>
+            </div>
+          </article>
         </section>
       )}
     </main>
