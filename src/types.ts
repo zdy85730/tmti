@@ -1,0 +1,83 @@
+export type Screen = 'intro' | 'quiz' | 'gate' | 'result'
+
+export type AxisId = 'public' | 'exposure' | 'boundary' | 'stability'
+
+export type SignalTag = 'regular' | 'mirror' | 'preference' | 'exposure'
+
+export type MotifId = 'frame' | 'orbit' | 'column' | 'ripple' | 'veil' | 'band' | 'grid' | 'arc'
+
+export type ThemeToken = 'ember' | 'ink' | 'moss' | 'berry' | 'slate' | 'dusk' | 'linen' | 'glass'
+
+export type BrandRevealState = 'tmti' | 'draft-peek' | 'meta-visible'
+
+export type ExportMode = 'cover' | 'cover-with-trace'
+
+export interface QuizOption {
+  label: string
+  value: 1 | 2 | 3
+}
+
+export interface QuizQuestion {
+  id: string
+  axis: AxisId
+  prompt: string
+  options: QuizOption[]
+  mirrorOf?: string
+  signalTags: SignalTag[]
+}
+
+export interface PublicTypeProfile {
+  code: string
+  name: string
+  shortDefinition: string
+  subtitle: string
+  motif: MotifId
+  themeToken: ThemeToken
+  target: Record<AxisId, 1 | 2 | 3>
+  acceptedDescriptors: string[]
+  withheldDescriptors: string[]
+}
+
+export interface DraftFragment {
+  label: '更快接受' | '多次回避' | '未进入封面' | '保留描述'
+  text: string
+}
+
+export interface DraftCard {
+  title: string
+  fragments: DraftFragment[]
+  note: string
+}
+
+export interface TraceNote {
+  text: string
+}
+
+export interface ResultSnapshot {
+  axisScores: Record<AxisId, number>
+  axisLevels: Record<AxisId, 1 | 2 | 3>
+  publicType: PublicTypeProfile
+  draftCard: DraftCard
+  traceNotes: TraceNote[]
+  brandRevealState: BrandRevealState
+  defaultExportMode: ExportMode
+}
+
+export interface PendingResult {
+  sessionId: string
+  unlockAt: number
+  createdAt: number
+}
+
+export interface ThemePalette {
+  paper: string
+  paperSoft: string
+  accent: string
+  accentSoft: string
+  text: string
+  subtext: string
+  line: string
+  glow: string
+  ghost: string
+  draftPaper: string
+}
