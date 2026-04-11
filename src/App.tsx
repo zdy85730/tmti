@@ -265,11 +265,11 @@ function App() {
               <p className="hero-brand">{appConfig.brandName}</p>
               <h1>{appConfig.brandTagline}</h1>
               <p className="hero-lede">
-                先挑几下口味，系统会长出一套能直接丢群里的测试。别人点开链接之后，可以像平时做梗测试一样一路做完，再拿到自己的圈内外号。
+                先回答几道生成题，系统会组合出一套可以直接分享的测试。别人打开链接之后，可以像平时做问卷一样一路做完，再拿到自己的结果。
               </p>
               <div className="button-row">
                 <button className="button button-primary" onClick={startBuilder}>
-                  开始捏题
+                  开始生成
                 </button>
                 <button className="button button-secondary" onClick={openAbout}>
                   了解 META-TI
@@ -281,12 +281,12 @@ function App() {
               <div className="hero-sheet hero-sheet-back">
                 <span>TMTI</span>
                 <strong>{manifest.themePackCount} 个具体局</strong>
-                <p>能直接发群</p>
+                <p>可直接分享</p>
               </div>
               <div className="hero-sheet hero-sheet-front">
                 <span>第一波</span>
                 <strong>游戏 + 职场</strong>
-                <p>先从最容易互相对号入座的几种局开做。</p>
+                <p>先从最容易代入的几类场景开始。</p>
               </div>
             </div>
           </article>
@@ -315,7 +315,7 @@ function App() {
         <section className="screen builder-screen">
           <article className="topbar-card">
             <div>
-              <p className="eyebrow">捏题台</p>
+              <p className="eyebrow">生成设置</p>
               <h2>
                 {builderProgress.answered} / {builderProgress.total}
               </h2>
@@ -324,7 +324,7 @@ function App() {
               <div className="progress-bar">
                 <span style={{ width: `${builderProgress.percentage}%` }} />
               </div>
-              <p className="topbar-note">这些只是在挑这套题怎么长，不会顺手把你也测一遍。</p>
+              <p className="topbar-note">这些问题只用于生成测试，不会对你本人给出结果。</p>
             </div>
           </article>
 
@@ -365,7 +365,7 @@ function App() {
               disabled={builderProgress.answered !== builderProgress.total}
               onClick={generateQuiz}
             >
-              长出这套
+              生成测试
             </button>
           </div>
         </section>
@@ -427,7 +427,7 @@ function App() {
             <article className="meta-card">
               <p className="eyebrow">来源</p>
               <h2>META-TI</h2>
-              <p>这套题是从 META-TI 那边长出来的。想看它为什么要做成现在这味，可以从这里回去看。</p>
+              <p>这套测试由 TMTI 生成。想了解这个项目为什么这样设计，可以从这里查看说明。</p>
               <button className="button button-secondary" onClick={openAbout}>
                 {appConfig.metaTiLinkLabel}
               </button>
@@ -456,7 +456,6 @@ function App() {
               <article key={question.id} className="question-card">
                 <div className="question-head">
                   <span className="question-tag">Q{index + 1}</span>
-                  <small>{question.role}</small>
                 </div>
                 <h3>{question.prompt}</h3>
                 <div className="option-list">
@@ -541,12 +540,12 @@ function App() {
             <p className="eyebrow">这套题</p>
             <h2>{generatedQuiz.title}</h2>
             <p>{generatedQuiz.shareSubtitle}</p>
-            <div className="button-row compact-row">
-              <button className="button button-secondary" onClick={handleCopyLink}>
-                再把这套发出去
-              </button>
-              <button className="button button-tertiary" onClick={openAbout}>
-                {appConfig.metaTiLinkLabel}
+              <div className="button-row compact-row">
+                <button className="button button-secondary" onClick={handleCopyLink}>
+                  复制这套测试
+                </button>
+                <button className="button button-tertiary" onClick={openAbout}>
+                  {appConfig.metaTiLinkLabel}
               </button>
             </div>
             {feedback && <p className="feedback-message">{feedback}</p>}
@@ -568,9 +567,9 @@ function App() {
           <article className="hero-card">
             <div className="hero-copy">
               <p className="hero-brand">META-TI</p>
-              <h1>从“测出啥”转到“题是怎么长出来的”。</h1>
+              <h1>从“测出什么”转到“测试如何生成”。</h1>
               <p className="hero-lede">
-                这个版本里，主产物不再是一张结果卡，而是一套能继续被别人做完的测试。TMTI 负责把它长出来，META-TI 负责留下这个项目为什么要这样做的入口。
+                这个版本里，主产物不再是一张结果卡，而是一套可以继续被别人做完的测试。TMTI 负责生成测试，META-TI 负责保留项目说明和来源入口。
               </p>
               <div className="button-row">
                 <a className="button button-secondary" href={appConfig.repoUrl} target="_blank" rel="noreferrer">
@@ -585,7 +584,7 @@ function App() {
             <div className="about-grid">
               <article className="sample-card">
                 <strong>一阶用户</strong>
-                <p>只负责把一套题长出来，不会被系统反过来下结论。</p>
+                <p>只负责生成一套测试，不会被系统反过来下结论。</p>
               </article>
               <article className="sample-card">
                 <strong>二阶用户</strong>
